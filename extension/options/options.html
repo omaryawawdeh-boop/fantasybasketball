@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Draft Assistant Settings</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main>
+  <h1><span>●</span> Draft Assistant</h1>
+  <p class="lede">Your rankings drive everything. The panel inside ESPN's draft room always suggests the highest player on <b>your</b> list who's still available. It never reorders your list.</p>
+
+  <section>
+    <h2>Your rankings</h2>
+    <div id="current" class="current"></div>
+    <details id="importBox">
+      <summary>Import or replace your list</summary>
+      <p class="help">Paste from Excel/Google Sheets (copy the name column, plus the DR column if you use it), a CSV, or plain text.
+        <code>Name*</code> = injury prone, <code>DR</code> = don't reach, <code>Tier 3</code> lines start a tier.
+        CSV columns: <code>player, rank, tier, team, pos, flags, note</code> (only player is required).</p>
+      <textarea id="paste" rows="12" placeholder="Tier 1&#10;Nikola Jokic&#10;Victor Wembanyama*&#10;Tier 2&#10;Josh Giddey	DR"></textarea>
+      <div class="row">
+        <label class="file">Or load a .csv / .txt <input type="file" id="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+        <label><input type="checkbox" id="keepTiers" checked> If the list has no tiers, keep my current tier breaks (same rank ranges)</label>
+      </div>
+      <div class="row">
+        <button id="preview" class="btn">Preview</button>
+        <button id="save" class="btn primary" disabled>Save as my board</button>
+      </div>
+      <div id="warnings"></div>
+      <div id="previewOut"></div>
+    </details>
+    <div class="row">
+      <button id="export" class="btn">Download as CSV</button>
+      <button id="copyText" class="btn">Copy as text</button>
+      <button id="resetDefault" class="btn">Restore my spreadsheet board (Ranking 8)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scoring (for FP/G)</h2>
+    <p class="help">When ESPN sync works and your league is a points league, the panel uses ESPN's own scoring settings for your league automatically. These weights are the fallback.</p>
+    <label class="inline"><input type="checkbox" id="useLeagueScoring"> Prefer my ESPN league's scoring when available</label>
+    <div class="row">
+      <label>Preset <select id="preset"></select></label>
+    </div>
+    <div id="weights" class="weights"></div>
+  </section>
+
+  <section>
+    <h2>Draft defaults</h2>
+    <p class="help">Used when ESPN can't be read (and on the manual board). ESPN sync overrides these with your league's real settings.</p>
+    <div class="grid">
+      <label>Teams <input type="number" id="teams" min="2" max="30"></label>
+      <label>Rounds <input type="number" id="rounds" min="1" max="30"></label>
+      <label>My draft slot <input type="number" id="mySlot" min="1" max="30"></label>
+      <label>Panel side <select id="side"><option value="right">Right</option><option value="left">Left</option></select></label>
+    </div>
+    <div id="slots" class="weights"></div>
+  </section>
+
+  <section>
+    <h2>About ESPN's pre-draft rankings (autopick)</h2>
+    <p class="help">This extension only <b>reads</b> from ESPN. It doesn't edit ESPN's pre-draft list. ESPN has no published way to write that list, and silently changing your league data isn't something it should do.
+      If you want autopick to follow your board too, open your league → <i>Draft</i> → <i>Pre-Draft Rankings</i> (Edit), and drag players into the order shown by <b>Copy as text</b> above.
+      Usually only the first 3–4 rounds matter, since you'll be picking live.</p>
+  </section>
+
+  <p class="foot">Data: your list is stored in this browser only (chrome.storage). Live picks, ADP, injuries and projections come from ESPN while you're in the draft room and are never sent anywhere else.</p>
+</main>
+<script src="../core/names.js"></script>
+<script src="../core/rankings.js"></script>
+<script src="../core/scoring.js"></script>
+<script src="../core/draft.js"></script>
+<script src="../data/default-rankings.js"></script>
+<script src="../ui/app.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

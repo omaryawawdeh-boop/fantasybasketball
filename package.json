@@ -1,0 +1,11 @@
+{
+  "name": "hoops-draft-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live fantasy basketball draft assistant that syncs your own tier list with the ESPN draft room.",
+  "scripts": {
+    "test": "node --test tests/",
+    "zip": "cd extension && zip -r ../hoops-draft-assistant.zip . -x '*.DS_Store'"
+  },
+  "license": "UNLICENSED"
+}
