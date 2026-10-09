@@ -40,16 +40,49 @@
     }
   }
 
-  const app = await HDA.createApp({ host, mode: 'espn', sync: true, draftId, myTeamId });
+  // Live feed: copies of the draft room's own incoming messages (content/ws-tap.js).
+  // Listening starts before the panel loads so the opening burst isn't missed.
+  const frames = [];
+  const pending = [];
+  let livePickCount = 0;
+  let liveReady = false;
+  let app;
+  function handleFrame(text) {
+    if (app.state.settings.syncMode === 'manual') return;
+    const known = new Set(app.state.espn.players.map((p) => p.espnId));
+    const picks = HDA.parseLiveFrame(text, known.size ? known : null);
+    if (picks.length) { livePickCount += picks.length; app.addLivePicks(picks); }
+  }
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || d.__hda !== 'ws' || typeof d.data !== 'string') return;
+    frames.push({ t: Date.now(), url: d.url, data: d.data.slice(0, 400) });
+    if (frames.length > 40) frames.shift();
+    if (liveReady) handleFrame(d.data);
+    else if (pending.length < 500) pending.push(d.data);
+  });
 
-  /** Fallback: find drafted player names in ESPN's pick-history / roster widgets. */
+  app = await HDA.createApp({ host, mode: 'espn', sync: true, draftId, myTeamId });
+
+  /** Read drafted names off ESPN's pick bar / pick history / rosters. */
   function scanPage() {
     const c = app.compute();
-    const names = c.board.players.filter((p) => !c.draft.drafted.has(p.key)).slice(0, 450);
-    const found = HDA.scanDraftedNames(document, names);
+    const found = HDA.scanDraftedNames(document, c.board.players.slice(0, 600)).filter((k) => !c.draft.drafted.has(k));
     if (found.length) app.addDetected(found);
     return HDA.lastScanSawContainers;
   }
+  // Page reading runs all the time (not only when ESPN's data fails): ESPN's
+  // league data may not list picks until the draft is over.
+  setInterval(() => { if (app.state.settings.syncMode !== 'manual' && !document.hidden) scanPage(); }, 1500);
+
+  // Live feed (registered above): handle frames buffered while the panel loaded.
+  liveReady = true;
+  for (const f of pending.splice(0)) handleFrame(f);
+
+  app.reportExtra = () => ({
+    liveFeed: { framesSeen: frames.length, picksParsed: livePickCount, lastFrames: frames.slice(-25) },
+    pageScan: HDA.lastScanInfo,
+  });
 
   // Alt+Shift+D toggles the panel.
   window.addEventListener('keydown', (ev) => {

@@ -32,7 +32,7 @@ const players = HDA.DEFAULT_RANKINGS.slice(0, 120).map((p, i) => ({
 const idOf = (name) => players.find((p) => p.player.fullName === name).id;
 
 let picks = [];
-const leagueJson = () => ({
+const leagueJson = (noPicks) => ({
   id: 4242,
   settings: {
     name: 'E2E League', size: 14,
@@ -41,7 +41,7 @@ const leagueJson = () => ({
     scoringSettings: { scoringType: 'H2H_POINTS', scoringItems: HDA.weightsToItems(HDA.DEFAULT_LEAGUE.scoringWeights) },
   },
   teams: Array.from({ length: 14 }, (_, i) => ({ id: i + 1, abbrev: `T${i + 1}`, name: `Team ${i + 1}` })),
-  draftDetail: { inProgress: true, drafted: false, picks },
+  draftDetail: { inProgress: true, drafted: false, picks: noPicks ? [] : picks },
 });
 const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall, roundId: Math.ceil(overall / 14), teamId, playerId: idOf(name) });
 
@@ -58,14 +58,32 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
     const headers = { 'content-type': 'application/json', 'access-control-allow-origin': 'https://fantasy.espn.com', 'access-control-allow-credentials': 'true', 'access-control-allow-headers': 'x-fantasy-filter' };
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (url.includes('kona_player_info')) return route.fulfill({ status: 200, headers, body: JSON.stringify({ players }) });
-    return route.fulfill({ status: 200, headers, body: JSON.stringify(leagueJson()) });
+    return route.fulfill({ status: 200, headers, body: JSON.stringify(leagueJson(url.includes('/leagues/5555'))) });
   });
-  await ctx.route('https://fantasy.espn.com/basketball/draft**', (route) => route.fulfill({
+  // Live draft connection for league 5555 (the real draft room gets picks this way).
+  let liveSocket = null;
+  await ctx.routeWebSocket(/fantasydraft\.espn\.com/, (ws) => { liveSocket = ws; });
+  await ctx.route('https://fantasy.espn.com/basketball/draft?leagueId=5555**', (route) => route.fulfill({
+    status: 200, contentType: 'text/html',
+    body: `<!doctype html><html><body style="font-family:sans-serif">
+      <div class="draft-header"><div class="pick-message">Your autopick would be: Nikola Jokic</div></div>
+      <div class="picks-carousel" id="car"></div>
+      <div class="board-players"><table>
+        <tr><td>Giannis Antetokounmpo</td><td><button>DRAFT</button></td></tr>
+        <tr><td>Luka Doncic</td><td><button>DRAFT</button></td></tr>
+      </table></div>
+      <script>
+        window.addPick = (t) => { const d = document.createElement('div'); d.className = 'pick__player'; d.textContent = t; document.getElementById('car').appendChild(d); };
+        new WebSocket('wss://fantasydraft.espn.com/game/fba/5555');
+      </script></body></html>`,
+  }));
+  await ctx.route('https://fantasy.espn.com/basketball/draft?leagueId=4242**', (route) => route.fulfill({
     status: 200, contentType: 'text/html',
     body: '<!doctype html><html><body style="background:#fff;font-family:sans-serif"><h1 style="padding:20px">FAKE ESPN draft room (test fixture)</h1><div style="padding:20px;width:900px;height:600px;background:#eee">ESPN draft UI would be here</div></body></html>',
   }));
 
   const results = [];
+  const results0 = results;
   const check = (name, cond, extra) => { results.push({ name, ok: !!cond }); console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ' — ' + extra : ''}`); };
 
   pick(1, 1, 'Nikola Jokic'); pick(2, 2, 'Shai Gilgeous-Alexander'); pick(3, 3, 'Victor Wembanyama'); pick(4, 4, 'Luka Doncic');
@@ -127,12 +145,52 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   check('Alt+Shift+D minimizes panel', (await panel.locator('.tab-handle').count()) === 1);
   await page.keyboard.press('Alt+Shift+D');
 
+  // ---- Real-ESPN behaviour: league data has no picks; picks arrive live + on the page ----
+  const live = await ctx.newPage();
+  live.on('pageerror', (e) => console.log('LIVE PAGE ERROR', e.message));
+  await live.goto('https://fantasy.espn.com/basketball/draft?leagueId=5555&seasonId=2027&teamId=3');
+  const lp = live.locator('#hoops-draft-assistant');
+  await lp.locator('.sync.ok').waitFor({ timeout: 15000 });
+  for (let i = 0; i < 50 && !liveSocket; i++) await live.waitForTimeout(100);
+  check('draft room live connection observed', !!liveSocket);
+  liveSocket.send('SELECTED 1 1000 {AAAA-BBBB}');
+  await live.waitForFunction(() => /Pick 2\b/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
+  check('live-feed pick crosses off Jokic within seconds', !/Nikola Jokic/.test(await lp.locator('.top-name').innerText()));
+  await live.evaluate(() => window.addPick('V. Wembanyama'));
+  await live.waitForFunction(() => /ON THE CLOCK/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
+  const ltop = await lp.locator('.top-name').innerText();
+  check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Giannis Antetokounmpo/.test(ltop), ltop);
+  check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis/.test(ltop));
+  liveSocket.send('SELECTED 3 1002 {MINE}');
+  await lp.locator('nav button', { hasText: 'My Team' }).click();
+  await live.waitForTimeout(500);
+  check('my live pick lands on My Team', /Giannis Antetokounmpo/.test(await lp.locator('.body').innerText()));
+  await lp.locator('nav button', { hasText: 'My Tiers' }).click();
+  const lt1 = await lp.locator('.th').first().innerText();
+  check('My Tiers: Tier 1 (Jokic, Wemby) fully crossed off', /0\/2 left/.test(lt1), lt1.replace(/\n/g, ' '));
+  await lp.locator('[data-search]').fill('giannis');
+  check('My Tiers: my live pick shows as mine', (await lp.locator('.prow.mine .nm').count()) === 1);
+  await lp.locator('[data-search]').fill('');
+  // Scrolling must survive background syncs and new picks.
+  await lp.locator('.body').evaluate((el) => { el.scrollTop = 900; });
+  const before = await lp.locator('.body').evaluate((el) => el.scrollTop);
+  liveSocket.send('SELECTED 4 1003 {X}');
+  await live.waitForTimeout(4500);
+  const after = await lp.locator('.body').evaluate((el) => el.scrollTop);
+  check('scroll position stays put through syncs and new picks', before > 500 && Math.abs(after - before) < 5, `${before} -> ${after}`);
+  await live.screenshot({ path: path.join(OUT, '8-live-sync.png') });
+  await lp.locator('nav button', { hasText: 'Picks' }).click();
+  await lp.locator('[data-act="copyReport"]').click();
+  await live.waitForTimeout(300);
+  check('Copy sync report button works', /Copied/.test(await lp.locator('[data-act="copyReport"]').innerText()));
+
   // Standalone board page.
   const [sw] = ctx.serviceWorkers().length ? ctx.serviceWorkers() : [await ctx.waitForEvent('serviceworker')];
   const extId = sw.url().split('/')[2];
   const board = await ctx.newPage();
   board.on('pageerror', (e) => console.log('BOARD ERROR', e.message));
   await board.goto(`chrome-extension://${extId}/standalone/board.html?manual=1`);
+  await board.locator('#app nav button', { hasText: 'Suggestions' }).click(); // the last-used tab is remembered
   await board.locator('#app .top-name').waitFor();
   check('standalone board suggests Jokic first', /Nikola Jokic/.test(await board.locator('#app .top-name').innerText()));
   await board.locator('#app .act').click();
@@ -163,6 +221,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   follow.on('pageerror', (e) => console.log('FOLLOW ERROR', e.message));
   await follow.goto(`chrome-extension://${extId}/standalone/board.html?league=4242&season=2027`);
   await follow.locator('#app .sync.ok').waitFor({ timeout: 15000 });
+  await follow.locator('#app nav button', { hasText: 'Suggestions' }).click();
   const ftop = await follow.locator('#app .top-name').innerText();
   check('follow board syncs league and shares marks with draft room', /Cooper Flagg/.test(ftop), ftop);
   check('follow board knows I am on the clock', /ON THE CLOCK/.test(await follow.locator('#app .clock').innerText()));

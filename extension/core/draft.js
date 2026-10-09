@@ -186,6 +186,34 @@
     return null;
   }
 
+  /**
+   * Merge picks from ESPN's league data (base) with picks seen live in the
+   * draft room (extras: live feed, page reading). A player is counted once;
+   * extras without a known pick number are numbered after the known picks,
+   * in the order they were seen.
+   */
+  function pickKey(p) {
+    return p.key || (p.espnId != null ? 'e' + p.espnId : null);
+  }
+
+  function mergePicks(base, extras) {
+    const out = [...base];
+    const used = new Set(base.map((p) => p.overall));
+    const have = new Set(base.map(pickKey).filter(Boolean));
+    let next = base.reduce((m, p) => Math.max(m, p.overall || 0), 0);
+    for (const x of extras || []) {
+      const k = pickKey(x);
+      if (k && have.has(k)) continue;
+      if (k) have.add(k);
+      let o = x.overall && !used.has(x.overall) ? x.overall : null;
+      if (!o) { o = next + 1; while (used.has(o)) o++; }
+      used.add(o);
+      next = Math.max(next, o);
+      out.push({ ...x, overall: o });
+    }
+    return out;
+  }
+
   // ---------- roster fit ----------
 
   /** Max number of dedicated (positional) starting slots filled — bipartite matching. */
@@ -310,7 +338,7 @@
   }
 
   Object.assign(HDA, {
-    SLOT_ELIGIBILITY, DEFAULT_ROSTER, buildBoard, ownerSlot, pickNumbersForSlot, computeDraft,
+    SLOT_ELIGIBILITY, DEFAULT_ROSTER, buildBoard, mergePicks, pickKey, ownerSlot, pickNumbersForSlot, computeDraft,
     dedicatedSlotsFilled, normalCdf, probGoneBefore, suggest, tiers,
   });
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;

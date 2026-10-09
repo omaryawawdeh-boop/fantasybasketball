@@ -8,6 +8,8 @@ test('normalizeName strips accents, punctuation and suffixes', () => {
   assert.equal(HDA.normalizeName('Jaren Jackson Jr.'), 'jaren jackson');
   assert.equal(HDA.normalizeName("De'Aaron Fox"), 'deaaron fox');
   assert.equal(HDA.normalizeName('Shai Gilgeous-Alexander'), 'shai gilgeous alexander');
+  assert.equal(HDA.normalizeName('V. Wembanyama'), 'v wembanyama', 'a leading initial is not a suffix');
+  assert.equal(HDA.normalizeName('Trey Murphy III'), 'trey murphy');
 });
 
 test('matchName: exact, alias, fuzzy, and refuses ambiguity', () => {
@@ -21,7 +23,7 @@ test('matchName: exact, alias, fuzzy, and refuses ambiguity', () => {
   assert.equal(HDA.matchName('Nic Claxton', idx).player.espnId, 1);
   assert.equal(HDA.matchName('Nic Claxton', idx).method, 'alias');
   assert.equal(HDA.matchName('victor wembanyama', idx).method, 'exact');
-  assert.equal(HDA.matchName('V. Wembanyama', idx), null, 'single-letter first names are too vague');
+  assert.equal(HDA.matchName('V. Wembanyama', idx).method, 'fuzzy', 'initial + unique last name (how draft rooms print names)');
   assert.equal(HDA.matchName('Jal Williams', idx), null, 'two J. Williams -> ambiguous');
   assert.equal(HDA.matchName('Vic Wembanyama', idx).method, 'fuzzy');
 });

@@ -44,7 +44,7 @@
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
       .split(' ')
-      .filter((t) => t && !SUFFIXES.has(t))
+      .filter((t, i) => t && !(i > 0 && SUFFIXES.has(t)))
       .join(' ');
   }
 

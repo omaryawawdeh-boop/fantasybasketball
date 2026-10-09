@@ -74,12 +74,14 @@
     const state = {
       settings: { ...defaultSettings(), ...(await storage.get('hda:settings', {})) },
       rankings: await loadRankings(),
-      local: await storage.get(`hda:draft:${draftId}`, { picks: [], taken: [], mineOverrides: {} }),
+      local: { picks: [], taken: [], mineOverrides: {}, live: [], ignored: [], ...(await storage.get(`hda:draft:${draftId}`, {})) },
+      sources: { ws: false, dom: false },
       ui: { tab: 'pick', search: '', hideDrafted: false, collapsed: false, openTiers: {}, ...(await storage.get('hda:ui', {})) },
       espn: { league: null, players: [], status: sync ? 'connecting' : 'off', message: '', lastOk: null },
       myTeamId,
     };
     let board = null;
+    let resetScroll = false;
     let boardSig = '';
 
     const persistLocal = () => storage.set(`hda:draft:${draftId}`, state.local);
@@ -111,14 +113,15 @@
       const teams = (L && L.size) || state.settings.teams;
       const rounds = (L && L.rounds) || state.settings.rounds;
       const rosterSlots = (L && L.rosterSlots) || state.settings.rosterSlots;
-      const picks = live ? L.draft.picks : state.local.picks;
+      // ESPN league data (or hand-marked picks) + picks seen live in the draft room.
+      const picks = HDA.mergePicks(live ? L.draft.picks : state.local.picks, state.local.live);
       const draft = HDA.computeDraft({
         board: b,
         picks,
         teams,
         rounds,
         mySlot: state.settings.mySlot,
-        myTeamId: live ? state.myTeamId : null,
+        myTeamId: sync ? state.myTeamId : null,
         pickOrder: L ? L.pickOrder : [],
         snake: !L || !L.draftType || L.draftType === 'SNAKE',
         mineOverrides: state.local.mineOverrides,
@@ -131,7 +134,7 @@
 
     // ---------- actions ----------
     const actions = {
-      tab(t) { state.ui.tab = t; persistUi(); render(); },
+      tab(t) { state.ui.tab = t; resetScroll = true; persistUi(); render(); },
       collapse() { state.ui.collapsed = !state.ui.collapsed; persistUi(); render(); },
       hideDrafted() { state.ui.hideDrafted = !state.ui.hideDrafted; persistUi(); render(); },
       toggleTier(t) {
@@ -149,6 +152,11 @@
       },
       untake(key) {
         state.local.taken = state.local.taken.filter((k) => k !== key);
+        // A wrongly detected pick: remove it and stop the page reader re-adding it.
+        if (state.local.live.some((x) => HDA.pickKey(x) === key)) {
+          state.local.live = state.local.live.filter((x) => HDA.pickKey(x) !== key);
+          if (!state.local.ignored.includes(key)) state.local.ignored.push(key);
+        }
         const i = state.local.picks.findIndex((p) => p.key === key);
         if (i >= 0) {
           // Removing a pick from the middle re-sequences the picks after it.
@@ -159,7 +167,10 @@
         persistLocal(); render();
       },
       undo() {
-        if (state.local.picks.length) state.local.picks.pop();
+        if (state.local.live.length && !state.local.picks.length && !state.local.taken.length) {
+          const x = state.local.live.pop();
+          state.local.ignored.push(HDA.pickKey(x));
+        } else if (state.local.picks.length) state.local.picks.pop();
         else state.local.taken.pop();
         persistLocal(); render();
       },
@@ -173,7 +184,7 @@
       },
       resetDraft() {
         if (!confirm('Clear all picks you tracked for this draft? (ESPN-synced picks are unaffected.)')) return;
-        state.local = { picks: [], taken: [], mineOverrides: {} };
+        state.local = { picks: [], taken: [], mineOverrides: {}, live: [], ignored: [] };
         persistLocal(); render();
       },
       setting(name, value) {
@@ -186,6 +197,13 @@
         else location.href = '../options/options.html';
       },
       retry() { if (api.onRetry) api.onRetry(); },
+      async copyReport(_, el) {
+        const text = buildReport();
+        try { await navigator.clipboard.writeText(text); } catch (e) {
+          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        if (el) { el.textContent = 'Copied \u2014 paste it to Claude'; setTimeout(() => { el.textContent = 'Copy sync report'; }, 2500); }
+      },
     };
 
     // ---------- render ----------
@@ -198,7 +216,7 @@
       ev.preventDefault();
       ev.stopPropagation();
       const fn = actions[el.dataset.act];
-      if (fn) fn(el.dataset.arg);
+      if (fn) fn(el.dataset.arg, el);
     });
     rootEl.addEventListener('input', (ev) => {
       const el = ev.target;
@@ -236,8 +254,14 @@
       }
       const focus = shadow.activeElement;
       const searchFocused = focus && focus.dataset && focus.dataset.search != null;
+      // Keep the scroll position across redraws (only a tab switch goes back to the top).
+      const oldBody = rootEl.querySelector('.body');
+      const scrollTop = oldBody && !resetScroll ? oldBody.scrollTop : 0;
+      resetScroll = false;
       rootEl.innerHTML = `${renderHeader()}<div class="body"></div>`;
       renderBody();
+      const newBody = rootEl.querySelector('.body');
+      if (newBody) newBody.scrollTop = scrollTop;
       if (searchFocused) {
         const s = rootEl.querySelector('[data-search]');
         if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
@@ -252,7 +276,9 @@
       const status = rootEl.querySelector('.clock');
       if (status) status.outerHTML = renderClock(c);
       const tabs = { pick: renderPick, tiers: renderTiers, team: renderTeam, picks: renderPicks }[state.ui.tab] || renderPick;
+      const keep = body.scrollTop;
       body.innerHTML = tabs(c);
+      body.scrollTop = keep;
       if (active) {
         const el = rootEl.querySelector(`[data-setting="${active}"]`);
         if (el) el.focus();
@@ -271,12 +297,13 @@
       const s = state.espn.status;
       if (s === 'ok') {
         const L = state.espn.league;
-        const waiting = L && !L.draft.inProgress && !L.draft.complete && !L.draft.picks.length;
+        const waiting = L && !L.draft.inProgress && !L.draft.complete && !L.draft.picks.length && !state.local.live.length;
         if (waiting) return `Connected to ${L.name || 'ESPN'} \u00b7 draft hasn\u2019t started${L.draftDate ? ` (${new Date(L.draftDate).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})` : ''}`;
-        return `Synced with ESPN \u00b7 ${fmtAgo(state.espn.lastOk)}`;
+        const via = state.sources.ws ? ' \u00b7 live feed' : state.sources.dom ? ' \u00b7 reading page' : '';
+        return `Synced with ESPN${via} \u00b7 ${fmtAgo(state.espn.lastOk)}`;
       }
       if (s === 'connecting') return 'Connecting to ESPN…';
-      if (s === 'dom') return 'Reading picks from the page (ESPN API unavailable)';
+      if (s === 'dom') return `Reading picks from the ${state.sources.ws ? 'live feed' : 'page'} (ESPN league data unavailable)`;
       return 'ESPN sync failed — tracking manually';
     }
 
@@ -471,15 +498,16 @@
         const t = L.teams.find((x) => x.id === id);
         return t ? t.abbrev || t.name : `Team ${id}`;
       };
+      const liveKeys = new Set(state.local.live.map(HDA.pickKey));
       const rows = [...draft.drafted.entries()].map(([key, d]) => ({ p: b.byKey.get(key), d })).sort((a, z) => (z.d.overall ?? 1e9) - (a.d.overall ?? 1e9));
       let html = `${renderSearch()}`;
       if (draft.unresolved.length) html += `<div class="warnbox">${draft.unresolved.length} ESPN pick(s) couldn’t be matched to a player (player list not loaded yet).</div>`;
-      if (!rows.length) return html + '<div class="empty">No picks yet. Picks sync from ESPN automatically; otherwise use ✓ to mark players drafted.</div>';
-      html += `<div class="tools"><button class="ghostbtn" data-act="undo">Undo last mark</button></div><ol class="list">`;
+      if (!rows.length) return html + (sync ? '<div class="tools"><span></span><button class="ghostbtn" data-act="copyReport">Copy sync report</button></div>' : '') + '<div class="empty">No picks yet. Picks sync from ESPN automatically; otherwise use ✓ to mark players drafted.</div>';
+      html += `<div class="tools"><button class="ghostbtn" data-act="undo">Undo last mark</button>${sync ? '<button class="ghostbtn" data-act="copyReport">Copy sync report</button>' : ''}</div><ol class="list">`;
       for (const { p, d } of rows.slice(0, 60)) {
         html += `<li class="prow ${d.mine ? 'mine' : ''}"><span class="rk">${d.overall || '–'}</span>
           <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${p.myRank ? `<span>your #${p.myRank}</span>` : '<span>off your list</span>'} ${teamName(d.teamId) ? `<span>${esc(teamName(d.teamId))}</span>` : ''}${d.manual ? '<span>marked by you</span>' : ''}</div></div>
-          ${!c.live || d.manual ? `<button class="sm" data-act="untake" data-arg="${esc(p.key)}" title="Undo">↺</button>` : ''}
+          ${!c.live || d.manual || liveKeys.has(p.key) ? `<button class="sm" data-act="untake" data-arg="${esc(p.key)}" title="Undo">↺</button>` : ''}
           <button class="sm ${d.mine ? 'on' : ''}" data-act="toggleMine" data-arg="${esc(p.key)}">Me</button></li>`;
       }
       return html + '</ol>';
@@ -503,31 +531,67 @@
       });
     }
 
+    function buildReport() {
+      const c = compute();
+      const L = state.espn.league;
+      const extra = api.reportExtra ? api.reportExtra() : {};
+      const bySource = {};
+      for (const x of state.local.live) bySource[x.source] = (bySource[x.source] || 0) + 1;
+      return JSON.stringify({
+        version: (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) ? chrome.runtime.getManifest().version : '?',
+        page: location.href.replace(/memberId=[^&]+/, 'memberId=x'),
+        status: state.espn.status, message: state.espn.message,
+        espnLeague: L ? { size: L.size, rounds: L.rounds, pickOrder: L.pickOrder.length, inProgress: L.draft.inProgress, complete: L.draft.complete, picks: L.draft.picks.length } : null,
+        espnPlayers: state.espn.players.length,
+        myTeamId: state.myTeamId, mySlot: c.draft.mySlot, currentPick: c.draft.currentPick,
+        livePicks: bySource, ignored: state.local.ignored.length, crossedOff: c.draft.drafted.size,
+        ...extra,
+      }, null, 1);
+    }
+
     const api = {
       state,
       render,
       compute,
       onRetry: null,
       setEspn(patch) {
-        const prevSig = state.espn.league ? JSON.stringify(state.espn.league.draft.picks.map((p) => p.overall + ':' + p.espnId)) : '';
+        const sigOf = () => (state.espn.league ? JSON.stringify(state.espn.league.draft.picks.map((p) => p.overall + ':' + p.espnId)) : '') + '|' + state.espn.status;
+        const prevSig = sigOf();
         Object.assign(state.espn, patch);
         if (patch.players) { state.espn.playersAt = Date.now(); board = null; }
-        const sig = state.espn.league ? JSON.stringify(state.espn.league.draft.picks.map((p) => p.overall + ':' + p.espnId)) : '';
-        if (patch.players || sig !== prevSig || patch.status) render();
+        // Redraw only when something you'd see changed; a routine poll just refreshes the status line.
+        if (patch.players || sigOf() !== prevSig) render();
         else renderSyncOnly();
       },
-      /** Page-read fallback: add newly seen drafted players as sequential picks. */
+      /** Drafted players read off the page (board keys). */
       addDetected(keys) {
         const c = compute();
-        let n = c.draft.currentPick;
         let changed = false;
         for (const k of keys) {
-          if (c.draft.drafted.has(k) || state.local.picks.some((p) => p.key === k)) continue;
-          state.local.picks.push({ overall: n++, key: k });
+          if (c.draft.drafted.has(k) || state.local.ignored.includes(k) || state.local.live.some((x) => HDA.pickKey(x) === k)) continue;
+          state.local.live.push({ key: k, source: 'page' });
           changed = true;
         }
-        if (changed) { persistLocal(); render(); }
+        if (changed) { state.sources.dom = true; persistLocal(); render(); }
       },
+      /** Picks from the draft room's live feed: [{espnId, teamId, overall}]. */
+      addLivePicks(list) {
+        let changed = false;
+        for (const p of list) {
+          const k = 'e' + p.espnId;
+          const existing = state.local.live.find((x) => HDA.pickKey(x) === k);
+          if (existing) {
+            // The feed knows the team; upgrade a page-read entry that didn't.
+            if (existing.teamId == null && p.teamId != null) { existing.teamId = p.teamId; changed = true; }
+            continue;
+          }
+          if (state.local.ignored.includes(k)) continue;
+          state.local.live.push({ key: k, espnId: p.espnId, teamId: p.teamId ?? null, overall: p.overall || null, source: 'live' });
+          changed = true;
+        }
+        if (changed) { state.sources.ws = true; persistLocal(); render(); }
+      },
+      reportExtra: null,
       toggle() { actions.collapse(); },
     };
     render();

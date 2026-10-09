@@ -1,17 +1,34 @@
 {
   "manifest_version": 3,
   "name": "Hoops Draft Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Your own tier list, live inside the ESPN fantasy basketball draft room. Crosses off drafted players and tells you who's next on YOUR board.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://fantasy.espn.com/*",
     "https://lm-api-reads.fantasy.espn.com/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://fantasy.espn.com/basketball/draft*"],
+      "matches": [
+        "https://*.espn.com/*"
+      ],
+      "js": [
+        "content/ws-tap.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://fantasy.espn.com/basketball/draft*"
+      ],
       "js": [
         "core/names.js",
         "core/rankings.js",
@@ -19,6 +36,7 @@
         "core/espn.js",
         "core/draft.js",
         "core/page-scan.js",
+        "core/live-picks.js",
         "core/espn-sync.js",
         "data/default-rankings.js",
         "ui/app.js",
@@ -27,7 +45,14 @@
       "run_at": "document_idle"
     }
   ],
-  "action": { "default_popup": "popup/popup.html", "default_title": "Hoops Draft Assistant" },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Hoops Draft Assistant"
+  },
   "options_page": "options/options.html",
-  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }
