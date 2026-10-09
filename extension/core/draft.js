@@ -273,7 +273,8 @@
           ? { kind: 'gone', text: `~${pct}% gone before your pick #${nextTurn} (ADP ${p.adp})` }
           : { kind: 'wait', text: `~${100 - pct}% still there at #${nextTurn} (ADP ${p.adp})` });
       }
-      if (p.dontReach) notes.push({ kind: 'dr', text: 'DR — market drafts him later than you rank him' });
+      // DR is acknowledged, never enforced: it changes nothing about the order.
+      if (p.dontReach) notes.push({ kind: 'dr', text: `DR \u2014 you like him here${p.adp ? `; market ADP ${p.adp}` : ''}` });
       if (p.injuryProne) notes.push({ kind: 'inj', text: 'Injury prone (*)' });
       if (p.injury) notes.push({ kind: 'status', text: `Status: ${p.injury.replace(/_/g, ' ').toLowerCase()}` });
       if (p.pos && p.pos.length) {
@@ -285,19 +286,10 @@
     });
 
     const suggestions = annotated.slice(0, limit);
-    // DR insight: your top guy is a DR player the market takes later. If he
-    // likely survives to your next turn, point out the next player on YOUR list
-    // as the alternative — still your call, still your order.
-    let drHint = null;
-    const top = suggestions[0];
-    if (top && top.player.dontReach && top.pGone != null && top.pGone < 0.4 && nextTurn) {
-      const alt = annotated.slice(1).find((a) => !a.player.dontReach);
-      if (alt) drHint = { player: top.player, alt: alt.player, pAvail: 1 - top.pGone, nextTurn };
-    }
     const likelyAtNext = nextTurn
       ? annotated.filter((a) => a.pGone != null && a.pGone < 0.5).slice(0, 6).map((a) => ({ player: a.player, pAvail: 1 - a.pGone }))
       : [];
-    return { suggestions, drHint, likelyAtNext, rosterFit: base, positionCounts: positionCounts(draft.myPlayers), usingList };
+    return { suggestions, likelyAtNext, rosterFit: base, positionCounts: positionCounts(draft.myPlayers), usingList };
   }
 
   /** Group the user's list by tier, with draft status per player. */

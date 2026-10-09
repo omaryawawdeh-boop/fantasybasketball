@@ -198,7 +198,7 @@ test('suggest follows the list order exactly, with notes only', () => {
   assert.equal(s.rosterFit.filled, 1);
 });
 
-test('suggest DR hint: top DR player likely there next turn -> point at next non-DR', () => {
+test('DR is acknowledged with a note but never changes the order', () => {
   const rankings = HDA.parseRankings('Tier 1\nSleeper Pick | DR\nStar Guy\nOther Guy').players;
   const espnPlayers = [
     { espnId: 1, name: 'Sleeper Pick', pos: ['C'], adp: 60 },
@@ -208,10 +208,10 @@ test('suggest DR hint: top DR player likely there next turn -> point at next non
   const board = HDA.buildBoard({ rankings, espnPlayers });
   const d = HDA.computeDraft({ board, picks: [], teams: 10, rounds: 5, mySlot: 1 });
   const s = HDA.suggest({ board, draft: d });
-  assert.equal(s.suggestions[0].player.name, 'Sleeper Pick', 'still #1 — order is law');
-  assert.ok(s.drHint);
-  assert.equal(s.drHint.alt.name, 'Star Guy');
-  assert.equal(s.drHint.nextTurn, 20);
+  assert.deepEqual(s.suggestions.map((x) => x.player.name), ['Sleeper Pick', 'Star Guy', 'Other Guy']);
+  const dr = s.suggestions[0].notes.find((n) => n.kind === 'dr');
+  assert.match(dr.text, /you like him here; market ADP 60/);
+  assert.equal(s.drHint, undefined, 'no "take someone else" nudge');
 });
 
 test('parseRankings reads * and DR from pasted spreadsheet cells', () => {

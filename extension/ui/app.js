@@ -40,6 +40,8 @@
       scoringWeights: { ...(L.scoringWeights || HDA.SCORING_PRESETS.espn_points.weights) },
       useLeagueScoring: true,
       syncMode: 'auto', // auto | manual
+      leagueId: L.espnLeagueId || null,
+      myTeamIds: {}, // ESPN leagueId -> your teamId (set in Options)
       side: 'right',
     };
   }
@@ -65,15 +67,16 @@
    * @param {'espn'|'standalone'} o.mode
    * @param {string} o.draftId key for this draft's local state (league id or 'standalone')
    * @param {number|null} [o.myTeamId]
+   * @param {boolean} [o.sync] true when an ESPN sync loop feeds this app
    */
-  async function createApp({ host, mode, draftId, myTeamId = null }) {
+  async function createApp({ host, mode, draftId, myTeamId = null, sync = mode === 'espn' }) {
     const shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     const state = {
       settings: { ...defaultSettings(), ...(await storage.get('hda:settings', {})) },
       rankings: await loadRankings(),
       local: await storage.get(`hda:draft:${draftId}`, { picks: [], taken: [], mineOverrides: {} }),
       ui: { tab: 'pick', search: '', hideDrafted: false, collapsed: false, openTiers: {}, ...(await storage.get('hda:ui', {})) },
-      espn: { league: null, players: [], status: mode === 'espn' ? 'connecting' : 'off', message: '', lastOk: null },
+      espn: { league: null, players: [], status: sync ? 'connecting' : 'off', message: '', lastOk: null },
       myTeamId,
     };
     let board = null;
@@ -98,7 +101,7 @@
     }
 
     function espnLive() {
-      return mode === 'espn' && state.settings.syncMode !== 'manual' && state.espn.status === 'ok' && state.espn.league;
+      return sync && state.settings.syncMode !== 'manual' && state.espn.status === 'ok' && state.espn.league;
     }
 
     function compute() {
@@ -257,16 +260,21 @@
     }
 
     function statusClass() {
-      if (mode !== 'espn') return 'manual';
+      if (!sync) return 'manual';
       if (state.settings.syncMode === 'manual') return 'manual';
       return { ok: 'ok', connecting: 'wait', error: 'bad', dom: 'warn' }[state.espn.status] || 'manual';
     }
 
     function statusText() {
-      if (mode !== 'espn') return 'Manual tracking';
+      if (!sync) return 'Manual tracking';
       if (state.settings.syncMode === 'manual') return 'Manual mode (sync off)';
       const s = state.espn.status;
-      if (s === 'ok') return `Synced with ESPN · ${fmtAgo(state.espn.lastOk)}`;
+      if (s === 'ok') {
+        const L = state.espn.league;
+        const waiting = L && !L.draft.inProgress && !L.draft.complete && !L.draft.picks.length;
+        if (waiting) return `Connected to ${L.name || 'ESPN'} \u00b7 draft hasn\u2019t started${L.draftDate ? ` (${new Date(L.draftDate).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})` : ''}`;
+        return `Synced with ESPN \u00b7 ${fmtAgo(state.espn.lastOk)}`;
+      }
       if (s === 'connecting') return 'Connecting to ESPN…';
       if (s === 'dom') return 'Reading picks from the page (ESPN API unavailable)';
       return 'ESPN sync failed — tracking manually';
@@ -338,10 +346,6 @@
         </div>
         <button class="act" data-act="take" data-arg="${esc(top.player.key)}" title="Mark as drafted">${c.live ? 'Taken' : 'Drafted'}</button>
       </div>`;
-      if (sug.drHint) {
-        html += `<div class="drhint"><b>DR call:</b> ${esc(sug.drHint.player.name)} is ~${Math.round(sug.drHint.pAvail * 100)}% likely to still be there at #${sug.drHint.nextTurn}.
-          Your next guy is <b>${esc(sug.drHint.alt.name)}</b> (your #${sug.drHint.alt.myRank}). Your list, your call.</div>`;
-      }
       html += '<div class="sec">Next on your board</div><ol class="list">';
       for (const s of rest) {
         html += `<li class="prow">
@@ -453,7 +457,7 @@
         <label>Teams <input type="number" min="2" max="30" data-setting="teams" value="${state.settings.teams}"></label>
         <label>Rounds <input type="number" min="1" max="30" data-setting="rounds" value="${state.settings.rounds}"></label>`}
         ${!(c.live && state.myTeamId != null) ? `<label>My draft slot <input type="number" min="1" max="30" data-setting="mySlot" value="${state.settings.mySlot}"></label>` : ''}
-        ${mode === 'espn' ? `<label><input type="checkbox" data-setting="syncMode" ${state.settings.syncMode === 'manual' ? 'checked' : ''}> Turn off ESPN sync (track by hand)</label>` : ''}
+        ${sync ? `<label><input type="checkbox" data-setting="syncMode" ${state.settings.syncMode === 'manual' ? 'checked' : ''}> Turn off ESPN sync (track by hand)</label>` : ''}
         <div class="btnrow"><button class="ghostbtn" data-act="undo">Undo last mark</button><button class="ghostbtn danger" data-act="resetDraft">Reset tracked picks</button></div>
       </div>`;
       return html;
@@ -482,7 +486,7 @@
     }
 
     // Keep "synced Xs ago" fresh.
-    setInterval(() => { if (!state.ui.collapsed) { const s = rootEl.querySelector('.sync'); if (s && mode === 'espn') { renderSyncOnly(); } } }, 5000);
+    setInterval(() => { if (!state.ui.collapsed) { const s = rootEl.querySelector('.sync'); if (s && sync) { renderSyncOnly(); } } }, 5000);
     function renderSyncOnly() {
       const s = rootEl.querySelector('.sync');
       if (!s) return;
@@ -572,7 +576,6 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .notes li::before{content:"• ";color:var(--muted)}
 .n-gone{color:var(--warn)}.n-wait{color:var(--good)}.n-tier{color:var(--accent)}.n-need{color:var(--mine)}.n-warn,.n-status{color:var(--bad)}.n-dr{color:#c59bff}.n-inj{color:#ff9f8f}
 .act{background:var(--accent);color:#1a0d06;border:0;border-radius:8px;padding:8px 12px;font-weight:800}
-.drhint{margin-top:8px;padding:8px 10px;border-radius:8px;background:#241a35;border:1px solid #4a3470;font-size:12.5px}
 .sec{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
 .list{list-style:none;margin:0;padding:0}
 .prow{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line)}

@@ -140,6 +140,58 @@
     saveSettings();
   };
 
+  // ----- ESPN league -----
+  $('leagueId').value = settings.leagueId || '';
+  $('seasonId').value = HDA.defaultSeasonId();
+  $('leagueId').oninput = (e) => { settings.leagueId = Number(e.target.value) || null; saveSettings(); };
+  const ord = (n) => n + (['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th');
+
+  async function testLeague() {
+    const id = Number($('leagueId').value);
+    const season = Number($('seasonId').value) || HDA.defaultSeasonId();
+    const out = $('leagueOut');
+    if (!id) { out.innerHTML = '<div class="warn">Enter your league ID (the number after leagueId= in your ESPN league URL).</div>'; return; }
+    out.innerHTML = '<div class="help">Reading league from ESPN…</div>';
+    let L;
+    try {
+      L = HDA.parseLeague(await HDA.directFetchJson(HDA.draftUrls(season, id).league));
+    } catch (e) {
+      out.innerHTML = `<div class="warn">${e.status === 401 || e.status === 403
+        ? 'ESPN said no. For a private league, log in at fantasy.espn.com in this browser, then test again.'
+        : e.status === 404 ? `League ${id} not found for the ${season - 1}-${String(season).slice(2)} season. Check the ID and season.`
+          : `Couldn’t reach ESPN: ${esc(e.message)}`}</div>`;
+      return;
+    }
+    const teamName = (tid) => { const t = L.teams.find((x) => x.id === tid); return t ? t.name : `Team ${tid}`; };
+    const mine = (settings.myTeamIds || {})[id];
+    const mySlot = mine != null && L.pickOrder.length ? L.pickOrder.indexOf(mine) + 1 : 0;
+    if (mySlot > 0 && settings.mySlot !== mySlot) { settings.mySlot = mySlot; saveSettings(); $('mySlot').value = mySlot; }
+
+    // Compare ESPN's scoring with the scoring on the tier sheet.
+    const expected = HDA.weightsToItems(HDA.DEFAULT_LEAGUE.scoringWeights);
+    const fmtItems = (items) => items.map((i) => `${HDA.STAT_LABEL[i.statId] || 'stat ' + i.statId} ${i.points > 0 ? '+' : ''}${i.points}`).join(', ');
+    const key = (items) => items.map((i) => `${i.statId}:${i.points}`).sort().join('|');
+    const scoringMatch = key(L.scoringItems) === key(expected);
+
+    let html = `<div class="ok">Connected: <b>${esc(L.name || 'League ' + id)}</b> · ${L.size} teams · ${L.rounds || '?'} rounds · ${esc((L.draftType || '').toLowerCase())} draft · ${esc((L.scoringType || '').replace(/_/g, ' ').toLowerCase())}</div>`;
+    html += `<p class="help">Draft: ${L.draft.complete ? 'complete' : L.draft.inProgress ? '<b>in progress now</b>' : L.draftDate ? new Date(L.draftDate).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'date not set'}</p>`;
+    html += `<p class="help">ESPN scoring: ${esc(fmtItems(L.scoringItems)) || 'none listed'}${scoringMatch ? ' — matches your tier sheet.' : '<br><b>Differs from your tier sheet’s scoring.</b> The panel uses ESPN’s numbers (FP/G will follow ESPN).'}</p>`;
+    html += `<div class="row"><label>Which team is yours? <select id="myTeam"><option value="">— pick your team —</option>${L.teams.map((t) => `<option value="${t.id}" ${t.id === mine ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label></div>`;
+    if (L.pickOrder.length) {
+      html += mySlot > 0 ? `<div class="ok">You pick <b>${ord(mySlot)}</b>. Your picks: ${HDA.pickNumbersForSlot(mySlot, L.size, L.rounds || 13).join(', ')}.</div>` : '';
+      html += `<table><thead><tr><th>Slot</th><th>Team</th></tr></thead><tbody>${L.pickOrder.map((tid, i) => `<tr${tid === mine ? ' style="color:var(--accent);font-weight:700"' : ''}><td>${i + 1}</td><td>${esc(teamName(tid))}</td></tr>`).join('')}</tbody></table>`;
+    } else {
+      html += '<div class="warn">ESPN hasn’t set the draft order yet. Test again once it’s randomized; your pick will show here. In the draft room it’s detected automatically either way.</div>';
+    }
+    out.innerHTML = html;
+    $('myTeam').onchange = (e) => {
+      settings.myTeamIds = { ...(settings.myTeamIds || {}), [id]: Number(e.target.value) || undefined };
+      saveSettings();
+      testLeague();
+    };
+  }
+  $('testLeague').onclick = testLeague;
+
   renderCurrent();
   renderWeights();
 })();

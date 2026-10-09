@@ -19,6 +19,7 @@
         "core/espn.js",
         "core/draft.js",
         "core/page-scan.js",
+        "core/espn-sync.js",
         "data/default-rankings.js",
         "ui/app.js",
         "content/espn-draft.js"

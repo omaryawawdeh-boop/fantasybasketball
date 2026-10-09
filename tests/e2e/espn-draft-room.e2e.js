@@ -36,7 +36,7 @@ const leagueJson = () => ({
   id: 4242,
   settings: {
     name: 'E2E League', size: 14,
-    draftSettings: { type: 'SNAKE', pickOrder: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] },
+    draftSettings: { type: 'SNAKE', date: Date.UTC(2026, 9, 18, 0, 0), pickOrder: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] },
     rosterSettings: { lineupSlotCounts: { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 11: 3, 12: 3, 13: 1 } },
     scoringSettings: { scoringType: 'H2H_POINTS', scoringItems: HDA.weightsToItems(HDA.DEFAULT_LEAGUE.scoringWeights) },
   },
@@ -92,9 +92,9 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   // Next available on the list after those picks: #15 Josh Giddey (DR).
   check('after 23 picks, top = next on my list (Josh Giddey, DR)', /Josh Giddey/.test(top2), top2);
   check('DR badge shown', /DR/.test(top2));
-  const drHint = await panel.locator('.drhint').count();
-  check('DR hint offered because market ADP is later', drHint === 1);
-  await page.screenshot({ path: path.join(OUT, '2-dr-call.png') });
+  const notes = await panel.locator('.top .notes').innerText();
+  check('DR acknowledged as a note, no nudge box', /you like him here/.test(notes) && (await panel.locator('.drhint').count()) === 0, notes.split('\n').find((l) => /DR/.test(l)));
+  await page.screenshot({ path: path.join(OUT, '2-dr-note.png') });
 
   await panel.locator('nav button', { hasText: 'My Tiers' }).click();
   const t1 = await panel.locator('.th').first().innerText();
@@ -132,7 +132,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   const extId = sw.url().split('/')[2];
   const board = await ctx.newPage();
   board.on('pageerror', (e) => console.log('BOARD ERROR', e.message));
-  await board.goto(`chrome-extension://${extId}/standalone/board.html`);
+  await board.goto(`chrome-extension://${extId}/standalone/board.html?manual=1`);
   await board.locator('#app .top-name').waitFor();
   check('standalone board suggests Jokic first', /Nikola Jokic/.test(await board.locator('#app .top-name').innerText()));
   await board.locator('#app .act').click();
@@ -148,7 +148,25 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await opts.locator('#paste').fill('Nikola Jokic\t\nVictor Wembanyama*\t\nJosh Giddey\tDR');
   await opts.locator('#preview').click();
   check('options preview parses pasted Excel cells', /3 players parsed/.test(await opts.locator('#previewOut').innerText()));
+  await opts.locator('#leagueId').fill('4242');
+  await opts.locator('#seasonId').fill('2027');
+  await opts.locator('#testLeague').click();
+  await opts.locator('#leagueOut .ok').first().waitFor({ timeout: 10000 });
+  check('options: Test connection reads the league', /Connected: E2E League/.test(await opts.locator('#leagueOut').innerText()));
+  await opts.locator('#myTeam').selectOption('5');
+  await opts.getByText('You pick 5th').waitFor({ timeout: 10000 });
+  check('options: picking my team shows my slot + pick numbers', /5, 24, 33, 52/.test(await opts.locator('#leagueOut').innerText()));
   await opts.screenshot({ path: path.join(OUT, '6-options.png'), fullPage: true });
+
+  // Follow the same league from a plain tab (e.g. drafting on the phone app).
+  const follow = await ctx.newPage();
+  follow.on('pageerror', (e) => console.log('FOLLOW ERROR', e.message));
+  await follow.goto(`chrome-extension://${extId}/standalone/board.html?league=4242&season=2027`);
+  await follow.locator('#app .sync.ok').waitFor({ timeout: 15000 });
+  const ftop = await follow.locator('#app .top-name').innerText();
+  check('follow board syncs league and shares marks with draft room', /Cooper Flagg/.test(ftop), ftop);
+  check('follow board knows I am on the clock', /ON THE CLOCK/.test(await follow.locator('#app .clock').innerText()));
+  await follow.screenshot({ path: path.join(OUT, '7-follow-board.png') });
 
   await ctx.close();
   const failed = results.filter((r) => !r.ok);

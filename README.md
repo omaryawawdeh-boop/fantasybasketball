@@ -7,7 +7,7 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
 - **Your order is law.** The top suggestion is always the highest-ranked player on *your* board who's still available. Nothing reorders your list.
 - **Syncs with ESPN automatically.** Works in mock and real drafts. It reads picks, teams, draft order, roster slots and scoring from ESPN's own draft-room requests (with your existing ESPN login) every ~3 seconds. Drafted players get crossed off and your picks go to My Team.
 - **Your spreadsheet is built in.** *Fantasy Basketball Ranking 8* has 168 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
-- **Context, not overrides.** Each player shows notes for the last player left in a tier, the chance he's gone before your next pick (from ESPN ADP), open-slot needs, and ESPN injury status. For a DR player who'll probably still be there next turn, the panel tells you so and names the next player on your list. The decision stays yours.
+- **Context, not overrides.** Each player shows notes for the last player left in a tier, the chance he's gone before your next pick (from ESPN ADP), open-slot needs, and ESPN injury status. DR players get a badge and a plain note ("you like him here; market ADP 40"). DR never changes the order or suggests someone else.
 
 ## Install (2 minutes, Chrome / Edge / Brave)
 
@@ -19,6 +19,15 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
    - ⚙ opens rankings & settings.
 
 To practice, start an ESPN mock draft (fantasy.espn.com → Basketball → Mock Draft Lobby) and watch the panel follow along.
+
+## Before draft day: connect your league
+
+⚙ → **My ESPN league** comes prefilled with your league (888634487). It's private, so log in at fantasy.espn.com in the same browser first.
+
+1. Click **Test connection**. It shows your league name, draft date and time, and the scoring ESPN has on file, and checks that scoring against your tier sheet.
+2. Pick your team from the dropdown. Once ESPN randomizes the draft order, the test shows **your slot and every pick number** you'll have. Inside the draft room your slot is detected automatically either way.
+
+**Drafting on your phone?** In the extension popup, **Follow my ESPN draft** opens a full-page board on your laptop that follows league 888634487 live. Anything you mark there is shared with the draft-room panel.
 
 ## Panel tabs
 

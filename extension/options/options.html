@@ -39,6 +39,17 @@
   </section>
 
   <section>
+    <h2>My ESPN league</h2>
+    <p class="help">Private leagues work as long as you're logged in to ESPN in this browser. Everything here is read-only. Run the test now, and again after ESPN sets the draft order, to see your pick.</p>
+    <div class="row">
+      <label>League ID <input id="leagueId" type="number" style="width:140px"></label>
+      <label>Season <input id="seasonId" type="number" style="width:90px"></label>
+      <button id="testLeague" class="btn primary">Test connection</button>
+    </div>
+    <div id="leagueOut"></div>
+  </section>
+
+  <section>
     <h2>Scoring (for FP/G)</h2>
     <p class="help">When ESPN sync works and your league is a points league, the panel uses ESPN's own scoring settings for your league automatically. These weights are the fallback.</p>
     <label class="inline"><input type="checkbox" id="useLeagueScoring"> Prefer my ESPN league's scoring when available</label>
@@ -72,7 +83,9 @@
 <script src="../core/names.js"></script>
 <script src="../core/rankings.js"></script>
 <script src="../core/scoring.js"></script>
+<script src="../core/espn.js"></script>
 <script src="../core/draft.js"></script>
+<script src="../core/espn-sync.js"></script>
 <script src="../data/default-rankings.js"></script>
 <script src="../ui/app.js"></script>
 <script src="options.js"></script>

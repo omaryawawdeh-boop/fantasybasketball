@@ -119,6 +119,7 @@
       id: t.id,
       abbrev: t.abbrev || null,
       name: t.name || [t.location, t.nickname].filter(Boolean).join(' ') || `Team ${t.id}`,
+      owners: Array.isArray(t.owners) ? t.owners : [],
     }));
     const dd = json.draftDetail || {};
     const picks = (dd.picks || [])
@@ -136,6 +137,7 @@
       name: settings.name || null,
       size: settings.size || teams.length || null,
       draftType: draftSettings.type || null,
+      draftDate: typeof draftSettings.date === 'number' && draftSettings.date > 0 ? draftSettings.date : null,
       pickOrder: Array.isArray(draftSettings.pickOrder) ? draftSettings.pickOrder : [],
       rosterSlots: Object.keys(rosterSlots).length ? rosterSlots : null,
       rounds: rounds || null,
