@@ -304,7 +304,7 @@
       const where = `Pick <b>${d.currentPick}</b> · Round ${d.currentRound}`;
       if (!d.mySlot) return `<div class="clock">${where} · <span class="muted">set your draft slot in My Team</span></div>`;
       if (d.onClock) return `<div class="clock me"><span class="pulse"></span>YOU'RE ON THE CLOCK · ${where}</div>`;
-      return `<div class="clock">${where} · You pick <b>#${d.myNextPick}</b> in <b>${d.picksAway}</b></div>`;
+      return `<div class="clock">${where} · You pick <b>#${d.myNextPick}</b> \u00b7 <b>${d.picksAway}</b> pick${d.picksAway === 1 ? '' : 's'} away</div>`;
     }
 
     function badges(p) {

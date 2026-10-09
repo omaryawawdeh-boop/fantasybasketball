@@ -269,7 +269,9 @@
       const pGone = probGoneBefore(p.adp, draft.currentPick, nextTurn);
       if (pGone != null && nextTurn) {
         const pct = Math.round(pGone * 100);
-        notes.push(pGone >= 0.5
+        notes.push(pGone >= 0.95
+          ? { kind: 'gone', text: `Won\u2019t last to your pick #${nextTurn} (ADP ${p.adp})` }
+          : pGone >= 0.5
           ? { kind: 'gone', text: `~${pct}% gone before your pick #${nextTurn} (ADP ${p.adp})` }
           : { kind: 'wait', text: `~${100 - pct}% still there at #${nextTurn} (ADP ${p.adp})` });
       }
