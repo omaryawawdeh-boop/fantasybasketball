@@ -8,7 +8,7 @@
 (function (root) {
   const HDA = (root.HDA = root.HDA || {});
 
-  const INCLUDE = '[class*="pick" i],[class*="board" i],[class*="history" i],[class*="roster" i],[class*="selected" i]';
+  const INCLUDE = '[class*="pick" i],[class*="board" i],[class*="history" i],[class*="roster" i],[class*="selected" i],[class*="drafted" i],[class*="activity" i]';
   const EXCLUDE = '[class*="queue" i],[class*="available" i],[class*="suggest" i],#hoops-draft-assistant';
   const BANNER = /(autopick|would be|on the clock|suggested|your queue)/i;
   const ACTION_BTN = /^\s*(draft|queue|\+|add|select)\s*$/i;
@@ -20,21 +20,30 @@
     return false;
   }
 
-  /** Name forms a draft room may print: "Nikola Jokic" and "N. Jokic". */
+  /** Name forms a draft room may print: "Nikola Jokic", "N. Jokic", and "Jokic" in a small pick cell. */
   function nameForms(players) {
     const initialCount = new Map();
+    const lastCount = new Map();
     const rows = [];
     for (const p of players) {
       const full = HDA.normalizeName(p.name);
       const toks = full.split(' ');
       if (toks.length < 2) continue;
       const initial = toks[0][0] + ' ' + toks.slice(1).join(' ');
+      const last = toks.slice(1).join(' ');
       initialCount.set(initial, (initialCount.get(initial) || 0) + 1);
-      rows.push({ key: p.key, full, initial });
+      lastCount.set(last, (lastCount.get(last) || 0) + 1);
+      rows.push({ key: p.key, full, initial, last });
     }
-    // "J. Williams" could be several players -> only trust unambiguous short forms.
-    return rows.map((r) => ({ ...r, initial: initialCount.get(r.initial) === 1 && r.initial.length >= 6 ? r.initial : null }));
+    // "J. Williams" / "Williams" could be several players -> only trust unambiguous short forms.
+    return rows.map((r) => ({
+      ...r,
+      initial: initialCount.get(r.initial) === 1 && r.initial.length >= 6 ? r.initial : null,
+      last: lastCount.get(r.last) === 1 && r.last.length >= 5 ? r.last : null,
+    }));
   }
+
+  const SMALL_CELL = 60; // a pick-bar cell, not a paragraph
 
   /**
    * @param {Document|Element} doc
@@ -60,13 +69,39 @@
     if (!chunks.length) return [];
     HDA.lastScanSawContainers = true;
     const hay = ' ' + chunks.map((t) => HDA.normalizeName(t)).join(' | ') + ' ';
+    const small = ' ' + chunks.filter((t) => t.trim().length <= SMALL_CELL).map((t) => HDA.normalizeName(t)).join(' | ') + ' ';
     const out = [];
     for (const f of nameForms(players)) {
-      if (hay.includes(' ' + f.full + ' ') || (f.initial && hay.includes(' ' + f.initial + ' '))) out.push(f.key);
+      if (hay.includes(' ' + f.full + ' ') || (f.initial && hay.includes(' ' + f.initial + ' ')) || (f.last && small.includes(' ' + f.last + ' '))) out.push(f.key);
     }
     return out;
   }
 
-  Object.assign(HDA, { scanDraftedNames, lastScanSawContainers: false, lastScanInfo: null });
+  /**
+   * Diagnostics: where on the page do player names appear? Lists the class
+   * chain around each sighting so the reader can be aimed at the right widget.
+   */
+  function nameSightings(doc, players, limit = 30) {
+    if (!doc || !doc.createTreeWalker) return [];
+    const forms = nameForms(players.slice(0, 250));
+    const out = [];
+    const walker = doc.createTreeWalker(doc.body || doc, 4 /* NodeFilter.SHOW_TEXT */);
+    let node;
+    while ((node = walker.nextNode()) && out.length < limit) {
+      const t = node.nodeValue;
+      if (!t || t.trim().length < 4) continue;
+      const n = ' ' + HDA.normalizeName(t) + ' ';
+      const hit = forms.find((f) => n.includes(' ' + f.full + ' ') || (f.initial && n.includes(' ' + f.initial + ' ')) || (f.last && t.trim().length <= SMALL_CELL && n.includes(' ' + f.last + ' ')));
+      if (!hit) continue;
+      const chain = [];
+      for (let el = node.parentElement, i = 0; el && i < 6; el = el.parentElement, i++) {
+        chain.push(`${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 3).join('.') : ''}`);
+      }
+      out.push({ text: t.trim().slice(0, 60), chain: chain.join(' < ') });
+    }
+    return out;
+  }
+
+  Object.assign(HDA, { scanDraftedNames, nameSightings, lastScanSawContainers: false, lastScanInfo: null });
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -82,6 +82,7 @@
   app.reportExtra = () => ({
     liveFeed: { framesSeen: frames.length, picksParsed: livePickCount, lastFrames: frames.slice(-25) },
     pageScan: HDA.lastScanInfo,
+    nameSightings: HDA.nameSightings(document, app.compute().board.players),
   });
 
   // Alt+Shift+D toggles the panel.

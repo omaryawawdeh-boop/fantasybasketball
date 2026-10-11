@@ -161,6 +161,10 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   const ltop = await lp.locator('.top-name').innerText();
   check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Giannis Antetokounmpo/.test(ltop), ltop);
   check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis/.test(ltop));
+  // Last-name-only pick cell ("Doncic" -> Luka) also counts; DRAFT-button rows still don't.
+  await live.evaluate(() => window.addPick('Doncic PG'));
+  await live.waitForFunction(() => !/Luka Doncic/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.body').innerText), null, { timeout: 5000 }).catch(() => {});
+  check('last-name-only pick cell crosses off Luka', !/Luka Doncic/.test(await lp.locator('.body').innerText()));
   liveSocket.send('SELECTED 3 1002 {MINE}');
   await lp.locator('nav button', { hasText: 'My Team' }).click();
   await live.waitForTimeout(500);
@@ -201,7 +205,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   opts.on('pageerror', (e) => console.log('OPTIONS ERROR', e.message));
   await opts.goto(`chrome-extension://${extId}/options/options.html`);
   await opts.locator('#current').waitFor();
-  check('options shows 168-player board', /168/.test(await opts.locator('#current').innerText()));
+  check('options shows 167-player board (Ranking 9)', /167/.test(await opts.locator('#current').innerText()));
   await opts.locator('#importBox summary').click();
   await opts.locator('#paste').fill('Nikola Jokic\t\nVictor Wembanyama*\t\nJosh Giddey\tDR');
   await opts.locator('#preview').click();

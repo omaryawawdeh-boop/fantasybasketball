@@ -48,7 +48,8 @@
 
   async function loadRankings() {
     const saved = await storage.get('hda:rankings', null);
-    if (saved && Array.isArray(saved.players) && saved.players.length) return saved;
+    // A saved copy of the built-in board is ignored so spreadsheet updates always show up.
+    if (saved && saved.source !== 'default' && Array.isArray(saved.players) && saved.players.length) return saved;
     return { players: HDA.DEFAULT_RANKINGS || [], tierLabels: HDA.DEFAULT_TIER_LABELS || {}, source: 'default' };
   }
 

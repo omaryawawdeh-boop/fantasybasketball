@@ -6,7 +6,7 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
 
 - **Your order is law.** The top suggestion is always the highest-ranked player on *your* board who's still available. Nothing reorders your list.
 - **Syncs with ESPN automatically.** Works in mock and real drafts. It reads picks, teams, draft order, roster slots and scoring from ESPN's own draft-room requests (with your existing ESPN login) every ~3 seconds. Drafted players get crossed off and your picks go to My Team.
-- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 8* has 168 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
+- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 9* has 167 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
 - **Context, not overrides.** Each player shows notes for the last player left in a tier, the chance he's gone before your next pick (from ESPN ADP), open-slot needs, and ESPN injury status. DR players get a badge and a plain note ("you like him here; market ADP 40"). DR never changes the order or suggests someone else.
 
 ## Install (2 minutes, Chrome / Edge / Brave)
@@ -48,7 +48,7 @@ The header shows the sync state, and the panel falls back in this order:
 
 ## Changing your rankings
 
-⚙ → *Import or replace your list*. You can paste straight from Excel or Google Sheets (name column, plus the DR column), a CSV, or text with `Tier N` lines. If the pasted list has no tiers, your current tier breaks are kept by rank position. **Restore my spreadsheet board** brings back Ranking 8. The editable source is [`data/omar-rankings.csv`](data/omar-rankings.csv).
+⚙ → *Import or replace your list*. You can paste straight from Excel or Google Sheets (name column, plus the DR column), a CSV, or text with `Tier N` lines. If the pasted list has no tiers, your current tier breaks are kept by rank position. **Restore my spreadsheet board** brings back the built-in board. To update the built-in board from a new spreadsheet version, run `python3 scripts/build_rankings.py "Ranking 10.xlsx" "Ranking 10"`. It keeps the spreadsheet order exactly, applies the tier breaks by rank, carries notes over by player, and rewrites [`data/omar-rankings.csv`](data/omar-rankings.csv) and `extension/data/default-rankings.js`.
 
 ## ESPN's pre-draft rankings (autopick)
 

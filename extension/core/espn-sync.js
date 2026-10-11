@@ -64,8 +64,8 @@
         }
         failures = 0;
         app.setEspn(patch);
-        // Fast while drafting, slow before it starts or after it ends.
-        schedule(league.draft.inProgress ? 3000 : league.draft.complete ? 60000 : 10000);
+        // Every 3s until the draft is over (ESPN's in-progress flag can lag).
+        schedule(league.draft.complete ? 60000 : 3000);
       } catch (e) {
         failures++;
         const denied = e.status === 401 || e.status === 403;

@@ -6,7 +6,7 @@
   let settings = { ...HDA.defaultSettings(), ...(await storage.get('hda:settings', {})) };
   let rankings = await storage.get('hda:rankings', null);
   const defaults = () => ({ players: HDA.DEFAULT_RANKINGS, tierLabels: HDA.DEFAULT_TIER_LABELS, source: 'default' });
-  if (!rankings || !rankings.players || !rankings.players.length) rankings = defaults();
+  if (!rankings || rankings.source === 'default' || !rankings.players || !rankings.players.length) rankings = defaults();
   let pending = null;
 
   function renderCurrent() {
@@ -16,7 +16,7 @@
       <span><b>${tiers}</b> tiers</span>
       <span><b>${rankings.players.filter((p) => p.dontReach).length}</b> DR</span>
       <span><b>${rankings.players.filter((p) => p.injuryProne).length}</b> injury prone</span>
-      <span>Source: <b>${rankings.source === 'default' ? 'your spreadsheet (Ranking 8)' : esc(rankings.sourceName || 'imported list')}</b></span>
+      <span>Source: <b>${rankings.source === 'default' ? `your spreadsheet (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})` : esc(rankings.sourceName || 'imported list')}</b></span>
       <span>Top 3: ${rankings.players.slice(0, 3).map((p) => esc(p.name)).join(', ')}</span>`;
   }
 
@@ -74,10 +74,9 @@
     preview();
   };
   $('resetDefault').onclick = async () => {
-    if (!confirm('Replace your current board with your spreadsheet board (Ranking 8)?')) return;
+    if (!confirm(`Replace your current board with your spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
     rankings = defaults();
-    await storage.set('hda:rankings', null);
-    await storage.set('hda:rankings', rankings);
+    await storage.set('hda:rankings', null); // no copy: always use the built-in board
     renderCurrent();
   };
   $('export').onclick = () => {
@@ -192,6 +191,7 @@
   }
   $('testLeague').onclick = testLeague;
 
+  $('resetDefault').textContent = `Restore my spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})`;
   renderCurrent();
   renderWeights();
 })();
