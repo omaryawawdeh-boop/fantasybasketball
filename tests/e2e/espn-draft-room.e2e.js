@@ -244,7 +244,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   opts.on('pageerror', (e) => console.log('OPTIONS ERROR', e.message));
   await opts.goto(`chrome-extension://${extId}/options/options.html`);
   await opts.locator('#current').waitFor();
-  check('options shows 167-player board (Ranking 9)', /167/.test(await opts.locator('#current').innerText()));
+  check('options shows 169-player board (Ranking 11)', /169/.test(await opts.locator('#current').innerText()));
   await opts.locator('#importBox summary').click();
   await opts.locator('#paste').fill('Nikola Jokic\t\nVictor Wembanyama*\t\nJosh Giddey\tDR');
   await opts.locator('#preview').click();

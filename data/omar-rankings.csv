@@ -26,33 +26,33 @@ rank,player,tier,team,pos,flags,note
 25,Devin Booker,5,PHX,PG/SG/SF,,Grades out 36th in your scoring. The market pays for his name.
 26,Jalen Duren,5,DET,C,,41 double doubles.
 27,Paolo Banchero,5,ORL,PF/SF,DR,
-28,Jaylen Brown,5,PHI,SG/SF/PF,,"Now in Philly with Maxey, LeBron and Embiid. His usage takes a hit."
-29,Bam Adebayo,5,MIA,PF/C,,Giannis arrival cuts his touches.
-30,LaMelo Ball,5,MIN,PG,*,Now in Minnesota. Starred injury prone.
-31,Pascal Siakam,6,IND,PF/C/SF,,
-32,Stephen Curry,6,GSW,PG,*,"Age 38, played 43 games. Expect some rest days."
-33,Deni Avdija,6,POR,SG/SF/PF,,"Starting in Portland. Sharpe is out about 6 months, which helps his usage."
-34,Julius Randle,6,BKN,PF,,Big usage in Brooklyn.
+28,Bam Adebayo,5,MIA,PF/C,,Giannis arrival cuts his touches.
+29,LaMelo Ball,5,MIN,PG,*,Now in Minnesota. Starred injury prone.
+30,Pascal Siakam,5,IND,PF/C/SF,,
+31,Stephen Curry,6,GSW,PG,*,"Age 38, played 43 games. Expect some rest days."
+32,Deni Avdija,6,POR,SG/SF/PF,,"Starting in Portland. Sharpe is out about 6 months, which helps his usage."
+33,Julius Randle,6,BKN,PF,,Big usage in Brooklyn.
+34,Jaylen Brown,6,PHI,SG/SF/PF,,"Now in Philly with Maxey, LeBron and Embiid. His usage takes a hit."
 35,Franz Wagner,6,ORL,SF/PF,,
 36,Austin Reaves,6,LAL,PG/SG/SF,*,Yahoo has him 20th. Missed preseason time.
-37,Jaren Jackson Jr.,6,UTA,PF/C,DR,"Nurkic is out 4+ weeks, so more center minutes for him early."
-38,Brandon Miller,6,CHA,SF/PF/SG,DR,"Yahoo/ESPN 68, consensus 53. Still ranked high here."
-39,LeBron James,6,PHI,SF/PF,*,Turns 42. Philly will rest him for the playoffs. Grades out 28th in your scoring.
-40,Michael Porter Jr.,6,BKN,SF/PF,,Day to day. Grades out 33rd in your scoring.
-41,Walker Kessler,6,LAL,C,DR,"Starting C next to Luka. Jammed finger in preseason, coach not concerned. Played 5 games last year."
-42,Ivica Zubac,6,IND,C,,Starting C next to Haliburton.
-43,Lauri Markkanen,7,UTA,SF/PF,,Played 42 games. Grades out 19th in your scoring.
-44,Jalen Williams,7,OKC,SF/PF/SG,,Healthy after an injury year. Could have a career season.
-45,Donovan Clingan,7,POR,C,DR,"37 double doubles, 1.7 blocks."
-46,Kawhi Leonard,7,TOR,SG/SF/PF,*,"Now in Toronto, age 35. Has not played 70 games since 2017."
-47,Zion Williamson,7,NOP,PF/C/SF,*,Has passed 60 games twice in 7 seasons.
-48,Chet Holmgren,7,OKC,PF/C,* DR,1.9 blocks a game. Yahoo has him 18th.
-49,Kyrie Irving,7,DAL,PG/SG,*,Back from an ACL tear that cost nearly two years.
-50,Darius Garland,7,LAC,PG,*,
-51,De'Aaron Fox,7,SAS,PG/SG,*,
-52,Tyler Herro,7,MIL,PG/SG,*,
-53,Ja Morant,7,POR,PG,*,
-54,Keyonte George,7,UTA,PG/SG,DR,
+37,LeBron James,6,PHI,SF/PF,*,Turns 42. Philly will rest him for the playoffs. Grades out 28th in your scoring.
+38,Ivica Zubac,6,IND,C,,Starting C next to Haliburton.
+39,Michael Porter Jr.,6,BKN,SF/PF,,Day to day. Grades out 33rd in your scoring.
+40,Lauri Markkanen,6,UTA,SF/PF,,Played 42 games. Grades out 19th in your scoring.
+41,Jalen Williams,6,OKC,SF/PF/SG,,Healthy after an injury year. Could have a career season.
+42,Jaren Jackson Jr.,6,UTA,PF/C,DR,"Nurkic is out 4+ weeks, so more center minutes for him early."
+43,Donovan Clingan,7,POR,C,DR,"37 double doubles, 1.7 blocks."
+44,Kawhi Leonard,7,TOR,SG/SF/PF,*,"Now in Toronto, age 35. Has not played 70 games since 2017."
+45,Zion Williamson,7,NOP,PF/C/SF,*,Has passed 60 games twice in 7 seasons.
+46,Chet Holmgren,7,OKC,PF/C,* DR,1.9 blocks a game. Yahoo has him 18th.
+47,Brandon Miller,7,CHA,SF/PF/SG,DR,"Yahoo/ESPN 68, consensus 53. Still ranked high here."
+48,Walker Kessler,7,LAL,C,DR,"Starting C next to Luka. Jammed finger in preseason, coach not concerned. Played 5 games last year."
+49,Darius Garland,7,LAC,PG,*,
+50,De'Aaron Fox,7,SAS,PG/SG,*,
+51,Tyler Herro,7,MIL,PG/SG,*,
+52,Ja Morant,7,POR,PG,*,
+53,Keyonte George,7,UTA,PG/SG,DR,
+54,Kyrie Irving,7,DAL,PG/SG,*,Back from an ACL tear that cost nearly two years.
 55,Nickeil Alexander-Walker,7,ATL,PG/SG/SF,,
 56,Desmond Bane,7,ORL,SG/SF,,
 57,Brandon Ingram,8,LAC,SG/SF/PF,*,
@@ -103,12 +103,12 @@ rank,player,tier,team,pos,flags,note
 102,Aaron Gordon,10,DEN,PF/C,,
 103,Immanuel Quickley,10,TOR,PG/SG,,
 104,CJ McCollum,10,ATL,PG/SG,,
-105,Maxime Raynaud,10,SAC,C/PF,,
+105,VJ Edgecombe,10,PHI,PG/SG,,
 106,John Collins,10,DET,PF/C/SF,,
-107,VJ Edgecombe,10,PHI,PG/SG,,
-108,Moussa Diabaté,10,CHA,C/PF,,Running with Charlotte starters. Flier only.
-109,Andrew Nembhard,10,IND,PG/SG,,
-110,Ty Jerome,10,MEM,PG/SG/SF,,
+107,Moussa Diabaté,10,CHA,C/PF,,Running with Charlotte starters. Flier only.
+108,Andrew Nembhard,10,IND,PG/SG,,
+109,Draymond Green,10,,,,
+110,Tre Jones,10,,,,
 111,Ajay Mitchell,10,OKC,PG/SG/SF,,
 112,Darius Acuff Jr.,10,SAC,PG,ROOKIE,Favored to start at PG in Sacramento. Fits points leagues.
 113,Cedric Coward,11,MEM,SG/SF,,
@@ -116,53 +116,55 @@ rank,player,tier,team,pos,flags,note
 115,Keegan Murray,11,SAC,SF/PF,,
 116,Kyshawn George,11,WAS,SG/SF/PF,,
 117,Bones Hyland,11,,,,
-118,Jrue Holiday,11,POR,PG/SG,,
-119,Reed Sheppard,11,HOU,PG/SG,,
-120,Nikola Vucevic,11,ORL,C,,ESPN has him 40th. Grades out 71st in your scoring.
-121,Brandin Podziemski,11,GSW,PG/SG/SF,,
-122,Keaton Wagler,11,LAC,SG/PG,ROOKIE,Strus foot injury could open minutes.
-123,Zach LaVine,11,SAC,PG/SG/SF,,Listed OUT. No details confirmed.
-124,Ayo Dosunmu,11,MIN,PG/SG/SF,,
-125,Jalen Suggs,11,ORL,PG/SG,,
-126,Jonathan Kuminga,11,MIN,SF/PF/C,,
-127,Isaiah Hartenstein,11,OKC,C,,
-128,Jared McCain,11,OKC,PG/SG,,
-129,Toumani Camara,11,POR,SF/PF/C,,
-130,Khaman Maluach,11,PHX,C,,
-131,Yaxel Lendeborg,11,GSW,PF/SF,ROOKIE,Minutes while Butler and Moody are out.
-132,Bobby Portis,11,MIA,PF/C,,
-133,Grayson Allen,11,CHA,SG/SF/PG,,
-134,Scoot Henderson,11,POR,PG/SG,*,
-135,Mitchell Robinson,11,BOS,C,*,
-136,Jaime Jaquez Jr.,12,MIL,SG/SF/PF,,Expected to start in Milwaukee after the Giannis trade.
-137,Deandre Ayton,12,WAS,C,,
-138,Luke Kennard,12,PHX,SG/SF/PG,,
-139,Peyton Watson,12,CLE,SF/PF/SG,,
-140,Bennedict Mathurin,12,NOP,SG/SF,,
-141,Alex Caruso,12,OKC,SG/SF/PG,,
-142,Ace Bailey,12,UTA,SF/PF/PG/SG,,
-143,Devin Vassell,12,SAS,SG/SF,,
-144,Neemias Queta,12,BOS,C,,
-145,Bilal Coulibaly,12,WAS,SG/SF/PF,,
-146,Jakob Poeltl,12,TOR,C,,
-147,Jerami Grant,12,MEM,SF/PF,,
-148,Mark Williams,12,PHX,C,,Out after shoulder surgery. Extended absence.
-149,Malik Monk,12,SAC,PG/SG,,
-150,Anfernee Simons,12,PHI,PG/SG,,
-151,Kristaps Porzingis,12,GSW,C/PF,*,Out indefinitely with an illness.
-152,Jordan Poole,12,NOP,PG/SG,,
-153,Dennis Schröder,12,CHA,PG/SG,,
-154,Daniel Gafford,12,DAL,C,,
-155,Tari Eason,12,HOU,SG/SF/PF,,
-156,Jaden Ivey,12,,,,
-157,T.J. McConnell,12,IND,PG,,
-158,Chris Boucher,12,,,,
-159,Clint Capela,12,,,,
-160,Buddy Hield,12,CHA,SG/SF/PG,,
-161,Collin Sexton,12,LAL,PG/SG,,
-162,Andre Drummond,12,NYK,C,,
-163,Tobias Harris,12,SAS,PF/SF,,
-164,Jeremy Sochan,12,,,,
-165,Jonas Valanciunas,12,,,,
-166,Duncan Robinson,12,DET,SG/SF,,
-167,Dereck Lively II,12,DAL,C,,
+118,Ty Jerome,11,MEM,PG/SG/SF,,
+119,Maxime Raynaud,11,SAC,C/PF,,
+120,Jrue Holiday,11,POR,PG/SG,,
+121,Reed Sheppard,11,HOU,PG/SG,,
+122,Nikola Vucevic,11,ORL,C,,ESPN has him 40th. Grades out 71st in your scoring.
+123,Brandin Podziemski,11,GSW,PG/SG/SF,,
+124,Keaton Wagler,11,LAC,SG/PG,ROOKIE,Strus foot injury could open minutes.
+125,Zach LaVine,11,SAC,PG/SG/SF,,Listed OUT. No details confirmed.
+126,Ayo Dosunmu,11,MIN,PG/SG/SF,,
+127,Jalen Suggs,11,ORL,PG/SG,,
+128,Jonathan Kuminga,11,MIN,SF/PF/C,,
+129,Isaiah Hartenstein,11,OKC,C,,
+130,Jared McCain,11,OKC,PG/SG,,
+131,Toumani Camara,11,POR,SF/PF/C,,
+132,Khaman Maluach,11,PHX,C,,
+133,Yaxel Lendeborg,11,GSW,PF/SF,ROOKIE,Minutes while Butler and Moody are out.
+134,Bobby Portis,11,MIA,PF/C,,
+135,Grayson Allen,11,CHA,SG/SF/PG,,
+136,Scoot Henderson,12,POR,PG/SG,*,
+137,Mitchell Robinson,12,BOS,C,*,
+138,Jaime Jaquez Jr.,12,MIL,SG/SF/PF,,Expected to start in Milwaukee after the Giannis trade.
+139,Deandre Ayton,12,WAS,C,,
+140,Luke Kennard,12,PHX,SG/SF/PG,,
+141,Peyton Watson,12,CLE,SF/PF/SG,,
+142,Bennedict Mathurin,12,NOP,SG/SF,,
+143,Alex Caruso,12,OKC,SG/SF/PG,,
+144,Ace Bailey,12,UTA,SF/PF/PG/SG,,
+145,Devin Vassell,12,SAS,SG/SF,,
+146,Neemias Queta,12,BOS,C,,
+147,Bilal Coulibaly,12,WAS,SG/SF/PF,,
+148,Jakob Poeltl,12,TOR,C,,
+149,Jerami Grant,12,MEM,SF/PF,,
+150,Mark Williams,12,PHX,C,,Out after shoulder surgery. Extended absence.
+151,Malik Monk,12,SAC,PG/SG,,
+152,Anfernee Simons,12,PHI,PG/SG,,
+153,Kristaps Porzingis,12,GSW,C/PF,*,Out indefinitely with an illness.
+154,Jordan Poole,12,NOP,PG/SG,,
+155,Dennis Schröder,12,CHA,PG/SG,,
+156,Daniel Gafford,12,DAL,C,,
+157,Tari Eason,12,HOU,SG/SF/PF,,
+158,Jaden Ivey,12,,,,
+159,T.J. McConnell,12,IND,PG,,
+160,Chris Boucher,12,,,,
+161,Clint Capela,12,,,,
+162,Buddy Hield,12,CHA,SG/SF/PG,,
+163,Collin Sexton,12,LAL,PG/SG,,
+164,Andre Drummond,12,NYK,C,,
+165,Tobias Harris,12,SAS,PF/SF,,
+166,Jeremy Sochan,12,,,,
+167,Jonas Valanciunas,12,,,,
+168,Duncan Robinson,12,DET,SG/SF,,
+169,Dereck Lively II,12,DAL,C,,
