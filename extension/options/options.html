@@ -60,6 +60,20 @@
   </section>
 
   <section>
+    <h2>Team balance &amp; health</h2>
+    <p class="help">The panel warns you when your top-ranked player would unbalance your team, and names a better-fitting player from the next few on your list. Targets are for a full roster. Multi-position players count partly toward each group.</p>
+    <div class="grid">
+      <label>Guards target <input type="number" id="fitG" min="0" max="15"></label>
+      <label>Forwards target <input type="number" id="fitF" min="0" max="15"></label>
+      <label>Centers target <input type="number" id="fitC" min="0" max="15"></label>
+      <label>"Older" means age <input type="number" id="fitOldAge" min="28" max="45"></label>
+      <label>Max older players <input type="number" id="fitMaxOld" min="0" max="13"></label>
+      <label>Max injury-prone (*) <input type="number" id="fitMaxProne" min="0" max="13"></label>
+    </div>
+    <div class="row"><button id="fitReset" class="btn">Reset to defaults</button></div>
+  </section>
+
+  <section>
     <h2>Draft defaults</h2>
     <p class="help">Used when ESPN can't be read (and on the manual board). ESPN sync overrides these with your league's real settings.</p>
     <div class="grid">

@@ -21,5 +21,5 @@
   const myTeamId = (settings.myTeamIds || {})[leagueId] ?? null;
   // Same draftId as the in-draft-room panel, so your marks are shared between them.
   const app = await HDA.createApp({ host, mode: 'standalone', sync: true, draftId: `espn-${seasonId}-${leagueId}`, myTeamId });
-  HDA.startEspnSync({ app, leagueId, seasonId, fetchJson: HDA.directFetchJson });
+  HDA.startEspnSync({ app, leagueId, seasonId, fetchJson: HDA.directFetchJson, fetchPublic: (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }) });
 })();

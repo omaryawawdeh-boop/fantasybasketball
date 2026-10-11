@@ -161,7 +161,28 @@
     }
   }
 
+  /** ESPN's public athlete record (same ids as fantasy): has dateOfBirth / age. */
+  function athleteUrl(id) {
+    return `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes/${id}?lang=en&region=us`;
+  }
+
+  function parseAthlete(json) {
+    if (!json || typeof json !== 'object') return { dob: null, age: null };
+    return { dob: typeof json.dateOfBirth === 'string' ? json.dateOfBirth : null, age: typeof json.age === 'number' ? json.age : null };
+  }
+
+  function ageFromDob(dob, now) {
+    const d = new Date(dob);
+    if (isNaN(d)) return null;
+    const t = now || new Date();
+    let a = t.getUTCFullYear() - d.getUTCFullYear();
+    const m = t.getUTCMonth() - d.getUTCMonth();
+    if (m < 0 || (m === 0 && t.getUTCDate() < d.getUTCDate())) a--;
+    return a;
+  }
+
   Object.assign(HDA, {
+    athleteUrl, parseAthlete, ageFromDob,
     ESPN_API_ROOT: API_ROOT, ESPN_PRO_TEAMS: PRO_TEAMS, ESPN_SLOTS: SLOTS,
     defaultSeasonId, draftUrls, parsePlayers, parseLeague, parseDraftUrl, positionsFromSlots,
   });

@@ -18,7 +18,34 @@
    * @param {(url:string, headers?:object) => Promise<any>} o.fetchJson  throws with .status on HTTP errors
    * @param {() => boolean} [o.scanPage] fallback page reader; returns true if it found pick widgets
    */
-  function startEspnSync({ app, leagueId, seasonId, fetchJson, scanPage }) {
+  /**
+   * Player ages from ESPN's public athlete records, cached for 30 days.
+   * Stops early if ESPN doesn't answer, so a blocked endpoint costs nothing.
+   */
+  async function loadAges(ids, fetchPublic) {
+    const cache = (await HDA.storage.get('hda:ages', {})) || {};
+    const now = Date.now();
+    const todo = [...new Set(ids)].filter((id) => id > 0 && (!cache[id] || now - cache[id].at > 30 * 864e5));
+    let i = 0;
+    let ok = 0;
+    let fail = 0;
+    const worker = async () => {
+      while (i < todo.length) {
+        if (fail >= 6 && ok === 0) return; // endpoint unreachable: give up quietly
+        const id = todo[i++];
+        try {
+          const a = HDA.parseAthlete(await fetchPublic(HDA.athleteUrl(id)));
+          if (a.dob || a.age != null) { cache[id] = { dob: a.dob, age: a.age, at: now }; ok++; } else fail++;
+        } catch (e) { fail++; }
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    if (ok) await HDA.storage.set('hda:ages', cache);
+    return { ages: cache, fetched: ok, failed: fail };
+  }
+
+  function startEspnSync({ app, leagueId, seasonId, fetchJson, scanPage, fetchPublic }) {
+    let agesRequested = false;
     let failures = 0;
     let playersLoadedAt = 0;
     let timer = null;
@@ -64,6 +91,15 @@
         }
         failures = 0;
         app.setEspn(patch);
+        if (!agesRequested && app.state.espn.players.length) {
+          agesRequested = true;
+          const b = app.compute().board;
+          const ids = [
+            ...b.players.filter((p) => p.onList && p.espnId != null).map((p) => p.espnId),
+            ...app.state.espn.players.slice().sort((x, y) => (x.espnRank || 999) - (y.espnRank || 999)).slice(0, 250).map((p) => p.espnId),
+          ];
+          loadAges(ids, fetchPublic || fetchJson).then((r) => app.setAges(r.ages, r)).catch(() => {});
+        }
         // Every 3s until the draft is over (ESPN's in-progress flag can lag).
         schedule(league.draft.complete ? 60000 : 3000);
       } catch (e) {
@@ -90,5 +126,5 @@
     return r.json();
   }
 
-  Object.assign(HDA, { startEspnSync, directFetchJson });
+  Object.assign(HDA, { startEspnSync, directFetchJson, loadAges });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

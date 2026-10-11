@@ -1,6 +1,6 @@
 // Service worker: proxies ESPN read requests (fallback when page CORS blocks the
 // content script) and opens extension pages.
-const ALLOWED_HOSTS = new Set(['lm-api-reads.fantasy.espn.com', 'fantasy.espn.com']);
+const ALLOWED_HOSTS = new Set(['lm-api-reads.fantasy.espn.com', 'fantasy.espn.com', 'sports.core.api.espn.com']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'hda-fetch') {

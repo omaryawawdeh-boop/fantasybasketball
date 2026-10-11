@@ -30,6 +30,17 @@ SPELLING = {
     'Jaime Jaquez': 'Jaime Jaquez Jr.',
 }
 
+# Backup birth dates for veterans, used only when ESPN's athlete records can't be
+# reached (ESPN's age wins when available). Keep this list to players 32+.
+DOB_FALLBACK = {
+    'LeBron James': '1984-12-30', 'Stephen Curry': '1988-03-14', 'Kevin Durant': '1988-09-29',
+    'James Harden': '1989-08-26', 'DeMar DeRozan': '1989-08-07', 'Damian Lillard': '1990-07-15',
+    'Paul George': '1990-05-02', 'Jrue Holiday': '1990-06-12', 'Nikola Vucevic': '1990-10-24',
+    'Kawhi Leonard': '1991-06-29', 'CJ McCollum': '1991-09-19', 'Kyrie Irving': '1992-03-23',
+    'Rudy Gobert': '1992-06-26', 'Jonas Valanciunas': '1992-05-06', 'T.J. McConnell': '1992-03-25',
+    'Tobias Harris': '1992-07-15', 'Andre Drummond': '1993-08-10', 'Clint Capela': '1994-05-18',
+}
+
 LEAGUE = {'espnLeagueId': 888634487, 'private': True, 'teams': 14, 'rounds': 13, 'format': 'H2H_POINTS',
           'rosterSlots': {'PG': 1, 'SG': 1, 'SF': 1, 'PF': 1, 'C': 1, 'G': 1, 'F': 1, 'UTIL': 3, 'BE': 3},
           'scoringWeights': {'FGM': 2, 'FTM': 1, '3PM': 1, 'REB': 1, 'AST': 1, 'STL': 3, 'BLK': 3, 'TO': -1, 'DD': 3, 'TD': 5}}
@@ -71,7 +82,7 @@ def main(xlsx, source_label):
         out.append({'rank': rank, 'name': name, 'tier': tier_of(rank), 'team': meta.get('team') or None,
                     'pos': [p for p in (meta.get('pos') or '').split('/') if p], 'injuryProne': prone,
                     'dontReach': bool(row[1]) if len(row) > 1 else False, 'rookie': 'ROOKIE' in flags,
-                    'note': meta.get('note') or ''})
+                    'note': meta.get('note') or '', 'dob': DOB_FALLBACK.get(name)})
         if not meta:
             print(f'new to the list: #{rank} {name}', file=sys.stderr)
 

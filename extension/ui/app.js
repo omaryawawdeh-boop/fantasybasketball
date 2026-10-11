@@ -77,6 +77,8 @@
       rankings: await loadRankings(),
       local: { picks: [], taken: [], mineOverrides: {}, live: [], ignored: [], ...(await storage.get(`hda:draft:${draftId}`, {})) },
       sources: { ws: false, dom: false },
+      ages: (await storage.get('hda:ages', {})) || {},
+      agesInfo: null,
       ui: { tab: 'pick', search: '', hideDrafted: false, collapsed: false, openTiers: {}, ...(await storage.get('hda:ui', {})) },
       espn: { league: null, players: [], status: sync ? 'connecting' : 'off', message: '', lastOk: null },
       myTeamId,
@@ -95,9 +97,14 @@
     }
 
     function getBoard() {
-      const sig = `${state.rankings.players.length}|${state.rankings.importedAt || state.rankings.source}|${state.espn.players.length}|${state.espn.playersAt || 0}|${JSON.stringify(scoringItems())}`;
+      const sig = `${state.rankings.players.length}|${state.rankings.importedAt || state.rankings.source}|${state.espn.players.length}|${state.espn.playersAt || 0}|${Object.keys(state.ages).length}|${JSON.stringify(scoringItems())}`;
       if (!board || sig !== boardSig) {
-        board = HDA.buildBoard({ rankings: state.rankings.players, espnPlayers: state.espn.players, scoringItems: scoringItems() });
+        const espnPlayers = state.espn.players.map((p) => {
+          const a = state.ages[p.espnId];
+          const age = a ? (a.dob ? HDA.ageFromDob(a.dob) : a.age) : null;
+          return age != null ? { ...p, age } : p;
+        });
+        board = HDA.buildBoard({ rankings: state.rankings.players, espnPlayers, scoringItems: scoringItems() });
         boardSig = sig;
       }
       return board;
@@ -142,7 +149,7 @@
       // Players marked "taken" by hand while ESPN sync is on (e.g. ESPN lagging).
       if (live) for (const k of state.local.taken) if (!draft.drafted.has(k) && b.byKey.has(k)) draft.drafted.set(k, { overall: null, teamId: null, mine: false, manual: true });
       const avail = getAvailability(b, draft);
-      const sug = HDA.suggest({ board: b, draft, rosterSlots, avail });
+      const sug = HDA.suggest({ board: b, draft, rosterSlots, avail, fit: state.settings.fit || {} });
       return { board: b, draft, sug, rosterSlots, live, teams, rounds, avail };
     }
 
@@ -377,32 +384,79 @@
       return parts.join('');
     }
 
+    function fitChips(fit, kinds = ['bad', 'warn', 'good']) {
+      if (!fit) return '';
+      const fl = fit.flags.filter((f) => kinds.includes(f.kind) || (f.kind === 'info' && kinds.includes('info')));
+      return fl.length ? `<div class="fitchips">${fl.map((f) => `<span class="fit f-${f.kind}" title="${esc(f.text)}">${esc(f.short || f.text)}</span>`).join('')}</div>` : '';
+    }
+
+    function teamStrip(profile) {
+      if (!profile) return '';
+      const { counts, targets, picksLeft, cfg } = profile;
+      const cell = (b, label) => {
+        const have = counts[b];
+        const need = Math.max(0, targets[b] - have);
+        const cls = have > targets[b] + 0.5 ? 'over' : have >= targets[b] - 0.25 ? 'full' : picksLeft > 0 && need / picksLeft >= cfg.shares[b] + 0.12 ? 'need' : '';
+        return `<span class="tb ${cls}" title="${label}: ${have.toFixed(1).replace('.0', '')} of a ${targets[b]}-player target">${b} <b>${(Math.round(have * 2) / 2)}</b>/${targets[b]}</span>`;
+      };
+      const oldCls = profile.old.length > cfg.maxOld ? 'over' : profile.old.length === cfg.maxOld ? 'full' : '';
+      const proneCls = profile.prone.length > cfg.maxProne ? 'over' : profile.prone.length === cfg.maxProne ? 'full' : '';
+      return `<div class="teamstrip"><span class="tl">Your team</span>${cell('G', 'Guards')}${cell('F', 'Forwards')}${cell('C', 'Centers')}
+        <span class="tb ${oldCls}" title="Players age ${cfg.oldAge}+ (comfortable max ${cfg.maxOld})">${cfg.oldAge}+ <b>${profile.old.length}</b>/${cfg.maxOld}</span>
+        <span class="tb ${proneCls}" title="Injury-prone (*) players (comfortable max ${cfg.maxProne})">INJ* <b>${profile.prone.length}</b>/${cfg.maxProne}</span></div>`;
+    }
+
     function renderPick(c) {
       const { sug, draft } = c;
       if (!sug.suggestions.length) {
         return `<div class="empty">${getBoard().players.length ? 'Everyone on your board is gone. Check the Picks tab or import a deeper list.' : 'No rankings loaded. Open ⚙ to import your list.'}</div>`;
       }
       const [top, ...rest] = sug.suggestions;
-      const noteHtml = (s) => s.notes.map((n) => `<li class="n-${n.kind}">${esc(n.text)}</li>`).join('');
+      const noteHtml = (s) => s.notes.filter((n) => !['need', 'warn', 'status', 'inj'].includes(n.kind)).map((n) => `<li class="n-${n.kind}">${esc(n.text)}</li>`).join('');
       let html = '';
       if (!sug.usingList) html += '<div class="warnbox">Your list is exhausted — showing ESPN rank order.</div>';
-      html += `<div class="top ${draft.onClock ? 'hot' : ''}">
+      const fp = sug.fitPick;
+      const fitByKey = new Map(fp ? fp.scored.map((x) => [x.player.key, x.fit]) : []);
+      const topFit = fitByKey.get(top.player.key) || null;
+      const avoid = topFit ? topFit.flags.filter((f) => f.kind === 'bad' || f.kind === 'warn') : [];
+      const helps = topFit ? topFit.flags.filter((f) => f.kind === 'good') : [];
+      html += teamStrip(sug.profile);
+      html += `<div class="top ${draft.onClock ? 'hot' : ''} ${topFit && topFit.bad ? 'warned' : ''}">
         <div class="top-l">
-          <div class="kicker">${draft.onClock ? 'Take' : 'Best available'} · your #${top.player.myRank || '–'}${top.player.tier != null ? ` · Tier ${top.player.tier}` : ''}</div>
+          <div class="kicker">${fp && fp.instead ? 'Top of your list' : draft.onClock ? 'Take' : 'Best available'} · your #${top.player.myRank || '–'}${top.player.tier != null ? ` · Tier ${top.player.tier}` : ''}</div>
           <div class="top-name">${esc(top.player.name)} ${badges(top.player)}</div>
           <div class="sub">${meta(top.player)} ${stats(top.player)}</div>
+          ${avoid.length ? `<div class="avoid"><b>${topFit.bad ? '⚠ Avoid for your team' : '⚠ Think twice'}</b><ul>${avoid.map((f) => `<li>${esc(f.text)}</li>`).join('')}</ul></div>` : ''}
+          ${helps.length && !avoid.length ? `<div class="fits">✓ ${helps.map((f) => esc(f.text)).join(' · ')}</div>` : ''}
           ${top.player.note ? `<div class="pnote">${esc(top.player.note)}</div>` : ''}
           <ul class="notes">${noteHtml(top)}</ul>
         </div>
         <button class="act" data-act="take" data-arg="${esc(top.player.key)}" title="Mark as drafted">${c.live ? 'Taken' : 'Drafted'}</button>
       </div>`;
+      if (fp && fp.instead) {
+        const alt = fp.instead;
+        const gains = alt.fit.flags.filter((f) => f.kind === 'good').map((f) => f.text);
+        const cons = alt.fit.flags.filter((f) => f.kind === 'warn' || f.kind === 'bad').map((f) => f.text);
+        const why = [...gains, ...(topFit && topFit.bad ? [`avoids: ${avoid.filter((f) => f.kind === 'bad').map((f) => f.text.split(':')[0].toLowerCase()).join(', ')}`] : [])];
+        html += `<div class="top instead">
+          <div class="top-l">
+            <div class="kicker">→ Draft instead · best fit for your team · your #${alt.player.myRank || '–'}</div>
+            <div class="top-name">${esc(alt.player.name)} ${badges(alt.player)}</div>
+            <div class="sub">${meta(alt.player)} ${stats(alt.player)}</div>
+            ${why.length ? `<div class="fits">✓ ${why.map(esc).join(' · ')}</div>` : ''}
+            ${cons.length ? `<div class="cons">Watch: ${cons.map(esc).join(' · ')}</div>` : ''}
+          </div>
+          <button class="act alt" data-act="take" data-arg="${esc(alt.player.key)}" title="Mark as drafted">${c.live ? 'Taken' : 'Drafted'}</button>
+        </div>`;
+      }
       html += '<div class="sec">Next on your board</div><ol class="list">';
       for (const s of rest) {
         html += `<li class="prow">
           <span class="rk">${s.player.myRank || ''}</span>
           <div class="who"><div class="nm">${esc(s.player.name)} ${badges(s.player)}</div>
           <div class="sub">${meta(s.player)} ${stats(s.player)}</div>
-          ${s.notes.length ? `<div class="mini">${s.notes.filter((n) => n.kind !== 'inj' && n.kind !== 'dr').map((n) => `<span class="n-${n.kind}">${esc(n.text)}</span>`).join('')}</div>` : ''}</div>
+          ${fitChips(fitByKey.get(s.player.key))}
+          ${s.notes.length ? `<div class="mini">${s.notes.filter((n) => n.kind !== 'inj' && n.kind !== 'dr' && n.kind !== 'need' && n.kind !== 'warn' && n.kind !== 'status').map((n) => `<span class="n-${n.kind}">${esc(n.text)}</span>`).join('')}</div>` : ''}</div>
           <button class="sm" data-act="take" data-arg="${esc(s.player.key)}" title="Mark as drafted">✓</button>
           <button class="sm" data-act="toggleMine" data-arg="${esc(s.player.key)}" title="I drafted him">Me</button>
         </li>`;
@@ -425,6 +479,7 @@
       const labels = state.rankings.tierLabels || {};
       let firstHit = null;
       const av = c.avail;
+      const sug = c.draft.complete ? null : c.sug;
       const showOdds = av && av.targets.length && av.sims;
       let html = `${renderSearch()}<div class="tools"><label><input type="checkbox" ${state.ui.hideDrafted ? 'checked' : ''} data-act="hideDrafted"> Hide drafted</label></div>`;
       if (showOdds) {
@@ -453,7 +508,8 @@
             html += `<li class="prow ${p.drafted ? 'gone' : ''} ${p.mine ? 'mine' : ''}" ${!p.drafted && firstHit === p.key ? `data-first-hit="${esc(p.key)}"` : ''}>
               <span class="rk">${p.myRank}</span>
               <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${stats(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
-              ${showOdds && !p.drafted ? oddsRow(av.odds.get(p.key), av.targets) : ''}</div>
+              ${showOdds && !p.drafted ? oddsRow(av.odds.get(p.key), av.targets) : ''}
+              ${!p.drafted && sug ? fitChips(HDA.assessFit(p, sug.profile, sug.rosterFit, c.rosterSlots), ['bad', 'warn', 'good', 'info']) : ''}</div>
               <button class="sm" data-act="take" data-arg="${esc(p.key)}" title="${p.drafted ? 'Undo' : 'Mark as drafted'}">${p.drafted ? '↺' : '✓'}</button>
               <button class="sm ${p.mine ? 'on' : ''}" data-act="toggleMine" data-arg="${esc(p.key)}" title="Mine">Me</button>
             </li>`;
@@ -497,6 +553,9 @@
       const total = draft.myPlayers.reduce((a, p) => a + (p.fppg || 0), 0);
       let html = `<div class="sec">Starting slots</div><div class="slots">${slotChips}</div>
         <div class="poscount">${Object.entries(pc).map(([k, v]) => `<span><b>${v}</b> ${k}</span>`).join('')}</div>
+        <div class="sec">Team balance</div>${teamStrip(sug.profile)}
+        ${sug.profile.old.length ? `<div class="muted small">${sug.profile.cfg.oldAge}+: ${sug.profile.old.map((p) => `${esc(p.name)} (${p.age})`).join(', ')}</div>` : ''}
+        ${sug.profile.prone.length ? `<div class="muted small">Injury prone (*): ${sug.profile.prone.map((p) => esc(p.name)).join(', ')}</div>` : ''}
         <div class="sec">Roster (${draft.myPlayers.length}/${draft.rounds})${total ? ` · ${Math.round(total * 10) / 10} FP/G total` : ''}</div>`;
       if (!draft.myPlayers.length) html += '<div class="empty small">No picks yet.</div>';
       else {
@@ -575,6 +634,7 @@
         espnPlayers: state.espn.players.length,
         myTeamId: state.myTeamId, mySlot: c.draft.mySlot, currentPick: c.draft.currentPick,
         livePicks: bySource, ignored: state.local.ignored.length, crossedOff: c.draft.drafted.size,
+        ages: { known: Object.keys(state.ages).length, lastLoad: state.agesInfo && { fetched: state.agesInfo.fetched, failed: state.agesInfo.failed } },
         ...extra,
       }, null, 1);
     }
@@ -622,6 +682,7 @@
         if (changed) { state.sources.ws = true; persistLocal(); render(); }
       },
       reportExtra: null,
+      setAges(ages, info) { state.ages = ages || {}; state.agesInfo = info || null; board = null; render(); },
       toggle() { actions.collapse(); },
     };
     render();
@@ -709,6 +770,29 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .ghostbtn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px}
 .ghostbtn.danger{color:var(--bad)}
 .muted{color:var(--muted)}
+.small{font-size:11.5px;margin-top:4px}
+.teamstrip{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:0 0 8px;font-size:11.5px}
+.teamstrip .tl{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;font-size:10.5px;margin-right:2px}
+.tb{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--muted)}
+.tb b{color:var(--ink)}
+.tb.over{border-color:var(--bad);color:var(--bad)}.tb.over b{color:var(--bad)}
+.tb.full{border-color:var(--warn);color:var(--warn)}
+.tb.need{border-color:var(--mine);color:var(--mine)}
+.top.warned{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad) inset}
+.avoid{margin-top:8px;background:#3a1c1a;border:1px solid #6b2a24;color:#ffb3aa;border-radius:8px;padding:7px 9px;font-size:12.5px}
+.avoid b{color:var(--bad);display:block;margin-bottom:2px}
+.avoid ul{margin:0;padding-left:16px}
+.fits{margin-top:6px;color:var(--good);font-size:12.5px}
+.cons{margin-top:4px;color:var(--warn);font-size:12px}
+.top.instead{margin-top:8px;border-color:var(--good);box-shadow:0 0 0 1px var(--good) inset;background:#12251f}
+.top.instead .kicker{color:var(--good)}
+.act.alt{background:var(--good);color:#06231a}
+.fitchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.fit{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;border:1px solid transparent}
+.f-bad{background:#3a1c1a;color:#ff8f84;border-color:#6b2a24}
+.f-warn{background:#352a12;color:var(--warn)}
+.f-good{background:#14302a;color:var(--good)}
+.f-info{background:var(--panel2);color:var(--muted)}
 .oddshead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;margin:4px 0 2px}
 .oddshead span{flex:1 1 100%;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .oddshead b{color:var(--ink);font-weight:600}

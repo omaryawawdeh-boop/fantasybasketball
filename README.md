@@ -20,7 +20,18 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
 
 To practice, start an ESPN mock draft (fantasy.espn.com → Basketball → Mock Draft Lobby) and watch the panel follow along.
 
-## Before draft day: connect your league
+## Team fit: balance, age, health
+
+Your list order never changes, but the panel also checks every pick against your roster:
+
+- **Position balance:** guards / forwards / centers vs. full-roster targets (default 5 / 5 / 3 for 13 rounds). Multi-position players count partly toward each group.
+- **Age:** players 35+. Taking a third one is flagged (adjustable). Ages come from ESPN's athlete records, with built-in birth dates for veterans as a backup.
+- **Health:** too many injury-prone (`*`) players, or ESPN listing a player OUT.
+- **Open starting slots** you still have to fill.
+
+When your #1 available would hurt the team, the Suggestions tab shows a red **⚠ Avoid** box explaining why, plus a green **Draft instead** card with the best-fitting player from the next ~12 on your list. My Tiers shows chips like `Too many F`, `Need C`, `Age 41: 2 vets` on every available player. The thresholds are in ⚙ → *Team balance & health*.
+
+
 
 ⚙ → **My ESPN league** comes prefilled with your league (888634487). It's private, so log in at fantasy.espn.com in the same browser first.
 

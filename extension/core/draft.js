@@ -83,6 +83,7 @@
       espnRank: e ? e.espnRank : null,
       adp: (e && e.adp) || (r && r.adp) || null,
       injury: e ? e.injury : null,
+      age: (e && e.age != null ? e.age : null) ?? (r && r.dob && HDA.ageFromDob ? HDA.ageFromDob(r.dob) : null),
       injuryProne: !!(r && r.injuryProne),
       dontReach: !!(r && r.dontReach),
       rookie: !!(r && r.rookie),
@@ -347,7 +348,7 @@
    * tags and the chance a player survives to your next pick are attached as
    * notes so you can see them at a glance — never applied as re-ranking.
    */
-  function suggest({ board, draft, rosterSlots = DEFAULT_ROSTER, limit = 6, depth = 30, avail = null }) {
+  function suggest({ board, draft, rosterSlots = DEFAULT_ROSTER, limit = 6, depth = 30, avail = null, fit = {} }) {
     const available = board.players.filter((p) => !draft.drafted.has(p.key));
     const listAvail = available.filter((p) => p.onList);
     const usingList = board.hasList && listAvail.length > 0;
@@ -392,7 +393,125 @@
     const likelyAtNext = nextTurn
       ? annotated.filter((a) => a.pGone != null && a.pGone < 0.5).slice(0, 6).map((a) => ({ player: a.player, pAvail: 1 - a.pGone }))
       : [];
-    return { suggestions, likelyAtNext, rosterFit: base, positionCounts: positionCounts(draft.myPlayers), usingList };
+    const profile = teamProfile({ myPlayers: draft.myPlayers, rounds: draft.rounds, fit });
+    profile.myPos = myPos;
+    const fitPick = draft.complete ? null : teamFitPick({ candidates, profile, rosterFit: base, rosterSlots });
+    return { suggestions, likelyAtNext, rosterFit: base, positionCounts: positionCounts(draft.myPlayers), usingList, profile, fitPick };
+  }
+
+  // ---------- team fit: balance, age, health ----------
+
+  const BUCKET_LABEL = { G: 'guard', F: 'forward', C: 'center' };
+  const DEFAULT_FIT = { shares: { G: 0.38, F: 0.38, C: 0.24 }, oldAge: 35, maxOld: 2, maxProne: 2 };
+
+  /** How much a player counts as guard / forward / center (multi-position players split). */
+  function bucketFractions(pos) {
+    const b = { G: 0, F: 0, C: 0 };
+    const ps = (pos || []).filter((p) => BASE_POS.includes(p));
+    for (const p of ps) b[p === 'C' ? 'C' : p === 'PG' || p === 'SG' ? 'G' : 'F'] += 1 / ps.length;
+    return b;
+  }
+
+  /** Whole-roster G/F/C targets that add up to the number of rounds. */
+  function balanceTargets(rounds, shares = DEFAULT_FIT.shares) {
+    const raw = Object.entries(shares).map(([k, v]) => [k, v * rounds]);
+    const t = Object.fromEntries(raw.map(([k, v]) => [k, Math.floor(v)]));
+    let left = rounds - Object.values(t).reduce((a, b) => a + b, 0);
+    for (const [k] of raw.sort((a, b) => (b[1] % 1) - (a[1] % 1))) { if (left-- <= 0) break; t[k]++; }
+    return t;
+  }
+
+  const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+  const fmtCount = (x) => (Math.round(x * 2) / 2).toString();
+
+  /** Snapshot of your roster: position counts vs targets, 35+ players, injury-prone players. */
+  function teamProfile({ myPlayers, rounds, fit = {} }) {
+    const cfg = { ...DEFAULT_FIT, ...fit };
+    const targets = cfg.targets || balanceTargets(rounds, cfg.shares);
+    if (cfg.targets) {
+      const sum = targets.G + targets.F + targets.C || 1;
+      cfg.shares = { G: targets.G / sum, F: targets.F / sum, C: targets.C / sum };
+    }
+    const counts = { G: 0, F: 0, C: 0 };
+    for (const p of myPlayers) { const f = bucketFractions(p.pos); for (const k in counts) counts[k] += f[k]; }
+    const old = myPlayers.filter((p) => p.age != null && p.age >= cfg.oldAge);
+    const prone = myPlayers.filter((p) => p.injuryProne);
+    const picksLeft = Math.max(0, rounds - myPlayers.length);
+    return { counts, targets, old, prone, picksLeft, picksMade: myPlayers.length, cfg };
+  }
+
+  /**
+   * How a player fits YOUR team right now. Returns a score adjustment and
+   * plain-English flags: 'bad' (avoid), 'warn' (think twice), 'good' (fills a need).
+   */
+  function assessFit(player, profile, rosterFit, rosterSlots) {
+    const flags = [];
+    let adj = 0;
+    const { counts, targets, picksLeft, cfg } = profile;
+    const frac = bucketFractions(player.pos);
+    for (const b of ['G', 'F', 'C']) {
+      if (!frac[b]) continue;
+      const have = counts[b];
+      const need = Math.max(0, targets[b] - have);
+      const L = BUCKET_LABEL[b];
+      if (have + frac[b] > targets[b] + 0.5) {
+        adj -= 30 * frac[b];
+        flags.push({ kind: 'bad', bucket: b, short: `Too many ${b}`, text: `Too many ${L}s: you have ${fmtCount(have)} (target ${targets[b]})` });
+      } else if (have >= targets[b] - 0.25) {
+        adj -= 12 * frac[b];
+        flags.push({ kind: 'warn', bucket: b, short: `${b} full`, text: `${L[0].toUpperCase() + L.slice(1)}s are full (${fmtCount(have)} of ${targets[b]})` });
+      } else if (picksLeft > 0 && need / picksLeft >= cfg.shares[b] + 0.12) {
+        adj += 12 * frac[b];
+        flags.push({ kind: 'good', bucket: b, short: `Need ${b}`, text: `You need ${L}s (${fmtCount(have)} of ${targets[b]})` });
+      }
+    }
+    if (rosterFit && player.pos && player.pos.length && rosterSlots) {
+      const myPos = (profile.myPos || []);
+      if (rosterFit.open.length && dedicatedSlotsFilled(rosterSlots, [...myPos, player.pos]).filled > rosterFit.filled
+        && rosterFit.open.length >= picksLeft - 1) {
+        adj += 10;
+        flags.push({ kind: 'good', short: 'Open slot', text: `Fills an open starting slot (${rosterFit.open.join(', ')} still empty)` });
+      }
+    }
+    if (player.age != null && player.age >= cfg.oldAge) {
+      const n = profile.old.length;
+      if (n >= cfg.maxOld) {
+        adj -= 30;
+        flags.push({ kind: 'bad', short: `Age ${player.age}: ${n} vets`, text: `Age ${player.age}: you already have ${n} players ${cfg.oldAge}+` });
+      } else if (n === cfg.maxOld - 1) {
+        adj -= 8;
+        flags.push({ kind: 'warn', short: `Age ${player.age}`, text: `Age ${player.age}: would be your ${ordinal(n + 1)} player ${cfg.oldAge}+` });
+      } else {
+        flags.push({ kind: 'info', short: `Age ${player.age}`, text: `Age ${player.age}` });
+      }
+    }
+    if (player.injuryProne) {
+      const n = profile.prone.length;
+      if (n > cfg.maxProne) { adj -= 15; flags.push({ kind: 'bad', short: 'Too many INJ*', text: `Injury prone (*): you already have ${n}` }); }
+      else if (n === cfg.maxProne) { adj -= 6; flags.push({ kind: 'warn', short: `${ordinal(n + 1)} INJ*`, text: `Injury prone (*): would be your ${ordinal(n + 1)}` }); }
+    }
+    if (player.injury === 'OUT' || player.injury === 'INJURY_RESERVE') { adj -= 15; flags.push({ kind: 'bad', short: 'OUT', text: `ESPN lists him ${player.injury.replace(/_/g, ' ').toLowerCase()}` }); }
+    else if (player.injury === 'SUSPENSION') { adj -= 10; flags.push({ kind: 'bad', short: 'Suspended', text: 'Suspended' }); }
+    else if (player.injury === 'DAY_TO_DAY') { adj -= 2; flags.push({ kind: 'warn', short: 'DTD', text: 'Day to day' }); }
+    return { adj, flags, bad: flags.some((f) => f.kind === 'bad') };
+  }
+
+  /**
+   * The best pick for your TEAM among the next players on your list. Your list
+   * sets the baseline (each spot down costs a little); fit flags move players
+   * up or down. Returns null when your #1 already fits.
+   */
+  function teamFitPick({ candidates, profile, rosterFit, rosterSlots, window = 12 }) {
+    const pool = candidates.slice(0, window);
+    if (!pool.length) return null;
+    const scored = pool.map((p, i) => {
+      const fit = assessFit(p, profile, rosterFit, rosterSlots);
+      return { player: p, fit, listIndex: i, score: 100 - 4 * i + fit.adj };
+    });
+    const top = scored[0];
+    const best = scored.slice().sort((a, b) => b.score - a.score || a.listIndex - b.listIndex)[0];
+    const instead = best.player.key !== top.player.key && (top.fit.bad || best.score - top.score >= 8) ? best : null;
+    return { top, instead, scored };
   }
 
   /** Group the user's list by tier, with draft status per player. */
@@ -413,6 +532,7 @@
   Object.assign(HDA, {
     SLOT_ELIGIBILITY, DEFAULT_ROSTER, buildBoard, mergePicks, pickKey, ownerSlot, pickNumbersForSlot, computeDraft,
     dedicatedSlotsFilled, normalCdf, probGoneBefore, availabilityOdds, suggest, tiers,
+    bucketFractions, balanceTargets, teamProfile, assessFit, teamFitPick, DEFAULT_FIT,
   });
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

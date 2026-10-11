@@ -210,6 +210,36 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   check('marking a pick advances to Victor Wembanyama', /Victor Wembanyama/.test(await board.locator('#app .top-name').innerText()));
   await board.screenshot({ path: path.join(OUT, '5-standalone.png'), fullPage: false });
 
+  // Team fit on the manual board: give me 6 forwards and 2 vets, then check the warnings.
+  const mineVia = async (name) => {
+    await board.locator('#app nav button', { hasText: 'My Tiers' }).click();
+    await board.locator('#app [data-search]').fill(name);
+    await board.locator('#app .prow').first().locator('[data-act="toggleMine"]').click();
+    await board.locator('#app [data-search]').fill('');
+  };
+  for (const n of ['Jalen Johnson', 'Jayson Tatum', 'Paolo Banchero', 'Franz Wagner', 'Julius Randle', 'Lauri Markkanen', 'Stephen Curry', 'James Harden']) await mineVia(n);
+  await board.locator('#app nav button', { hasText: 'Suggestions' }).click();
+  const strip = await board.locator('#app .teamstrip').first().innerText();
+  check('team strip shows forwards over target and 2 vets', /F\s*6\/5/.test(strip.replace(/\n/g, ' ')) && /35\+\s*2\/2/.test(strip.replace(/\n/g, ' ')), strip.replace(/\n/g, ' '));
+  await board.locator('#app nav button', { hasText: 'My Tiers' }).click();
+  await board.locator('#app [data-search]').fill('lebron');
+  const lebron = await board.locator('#app .prow').first().innerText();
+  check('a third 35+ player (LeBron, 41) is flagged', /Age 41: 2 vets/.test(lebron), lebron.replace(/\n/g, ' '));
+  await board.locator('#app [data-search]').fill('kawhi');
+  check('another forward is flagged "Too many F"', /Too many F/.test(await board.locator('#app .prow').first().innerText()));
+  await board.locator('#app [data-search]').fill('');
+  // Make a forward my #1 available by marking everyone above him drafted, then expect "Draft instead".
+  await board.locator('#app nav button', { hasText: 'Suggestions' }).click();
+  for (let i = 0; i < 25; i++) {
+    const topTxt = await board.locator('#app .top-name').first().innerText();
+    if (await board.locator('#app .top.warned').count()) break;
+    await board.locator('#app .top .act').first().click();
+    if (!topTxt) break;
+  }
+  check('when my #1 hurts the team: red "Avoid" box + "Draft instead" card', (await board.locator('#app .avoid').count()) === 1 && (await board.locator('#app .top.instead').count()) === 1,
+    (await board.locator('#app .top-name').allInnerTexts()).join(' -> '));
+  await board.screenshot({ path: path.join(OUT, '9-team-fit.png') });
+
   const opts = await ctx.newPage();
   opts.on('pageerror', (e) => console.log('OPTIONS ERROR', e.message));
   await opts.goto(`chrome-extension://${extId}/options/options.html`);

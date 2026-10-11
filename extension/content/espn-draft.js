@@ -93,5 +93,18 @@
     }
   }, true);
 
-  HDA.startEspnSync({ app, leagueId: ctx.leagueId, seasonId, fetchJson, scanPage });
+  // Public ESPN data (athlete ages): no cookies needed.
+  async function fetchPublic(url) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.json();
+      throw Object.assign(new Error(`ESPN returned ${r.status}`), { status: r.status });
+    } catch (e) {
+      const res = await chrome.runtime.sendMessage({ type: 'hda-fetch', url });
+      if (res && res.ok) return res.json;
+      throw new Error((res && res.error) || e.message);
+    }
+  }
+
+  HDA.startEspnSync({ app, leagueId: ctx.leagueId, seasonId, fetchJson, scanPage, fetchPublic });
 })();

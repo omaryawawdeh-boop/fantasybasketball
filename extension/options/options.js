@@ -192,6 +192,30 @@
   $('testLeague').onclick = testLeague;
 
   $('resetDefault').textContent = `Restore my spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})`;
+  // ----- team balance -----
+  function renderFit() {
+    const f = settings.fit || {};
+    const t = f.targets || HDA.balanceTargets(settings.rounds || 13);
+    $('fitG').value = t.G; $('fitF').value = t.F; $('fitC').value = t.C;
+    $('fitOldAge').value = f.oldAge ?? HDA.DEFAULT_FIT.oldAge;
+    $('fitMaxOld').value = f.maxOld ?? HDA.DEFAULT_FIT.maxOld;
+    $('fitMaxProne').value = f.maxProne ?? HDA.DEFAULT_FIT.maxProne;
+  }
+  for (const id of ['fitG', 'fitF', 'fitC', 'fitOldAge', 'fitMaxOld', 'fitMaxProne']) {
+    $(id).oninput = () => {
+      const n = (x) => Math.max(0, Number($(x).value) || 0);
+      settings.fit = {
+        targets: { G: n('fitG'), F: n('fitF'), C: n('fitC') },
+        oldAge: n('fitOldAge') || HDA.DEFAULT_FIT.oldAge,
+        maxOld: n('fitMaxOld'),
+        maxProne: n('fitMaxProne'),
+      };
+      saveSettings();
+    };
+  }
+  $('fitReset').onclick = () => { delete settings.fit; saveSettings(); renderFit(); };
+  renderFit();
+
   renderCurrent();
   renderWeights();
 })();
