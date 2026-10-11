@@ -6,21 +6,23 @@ const path = require('node:path');
 const HDA = require('./load-core');
 require('../extension/data/default-rankings.js');
 
-test('default rankings = CSV order (Ranking 9), 167 players, flags intact', () => {
+test('default rankings = CSV order (Ranking 10), 167 players, flags intact', () => {
   const csv = fs.readFileSync(path.join(__dirname, '../data/omar-rankings.csv'), 'utf8');
   const parsed = HDA.parseRankings(csv);
   const def = HDA.DEFAULT_RANKINGS;
   assert.equal(def.length, 167);
-  assert.equal(HDA.DEFAULT_RANKINGS_VERSION, 'Ranking 9');
+  assert.equal(HDA.DEFAULT_RANKINGS_VERSION, 'Ranking 10');
   assert.deepEqual(parsed.players.map((p) => p.name), def.map((p) => p.name));
   assert.deepEqual(parsed.players.map((p) => p.tier), def.map((p) => p.tier));
-  assert.deepEqual(def.slice(0, 5).map((p) => p.name), ['Nikola Jokic', 'Victor Wembanyama', 'Giannis Antetokounmpo', 'Luka Doncic', 'Shai Gilgeous-Alexander']);
-  assert.deepEqual(def.filter((p) => p.dontReach).map((p) => p.rank), [15, 19, 28, 33, 35, 41, 46, 48, 55, 62]);
+  assert.deepEqual(def.slice(0, 3).map((p) => p.name), ['Nikola Jokic', 'Victor Wembanyama', 'Shai Gilgeous-Alexander']);
+  assert.deepEqual(def.filter((p) => p.dontReach).map((p) => p.rank), [15, 19, 27, 37, 38, 41, 45, 48, 54, 62]);
   assert.equal(def.filter((p) => p.injuryProne).length, 20);
   assert.equal(parsed.players.filter((p) => p.dontReach).length, 10);
   assert.equal(def[166].name, 'Dereck Lively II');
-  // Ranking 9 moves vs 8
+  // Ranking 10 moves vs 9
   const rankOf = (n) => def.find((p) => p.name === n).rank;
+  assert.equal(rankOf('Stephen Curry'), 32);
+  assert.equal(rankOf('Walker Kessler'), 41);
   assert.equal(rankOf('Payton Pritchard'), 87);
   assert.equal(rankOf('Bones Hyland'), 117);
   assert.equal(rankOf('Jerami Grant'), 147);

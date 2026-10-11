@@ -103,6 +103,18 @@
       return board;
     }
 
+    // Availability odds rerun only when the board, the pick, or who's gone changes.
+    let availCache = null;
+    let availSig = '';
+    function getAvailability(b, draft) {
+      const sig = `${boardSig}|${draft.currentPick}|${draft.mySlot}|${[...draft.drafted.keys()].sort().join(',')}`;
+      if (!availCache || sig !== availSig) {
+        availCache = HDA.availabilityOdds({ board: b, draft });
+        availSig = sig;
+      }
+      return availCache;
+    }
+
     function espnLive() {
       return sync && state.settings.syncMode !== 'manual' && state.espn.status === 'ok' && state.espn.league;
     }
@@ -129,8 +141,9 @@
       });
       // Players marked "taken" by hand while ESPN sync is on (e.g. ESPN lagging).
       if (live) for (const k of state.local.taken) if (!draft.drafted.has(k) && b.byKey.has(k)) draft.drafted.set(k, { overall: null, teamId: null, mine: false, manual: true });
-      const sug = HDA.suggest({ board: b, draft, rosterSlots });
-      return { board: b, draft, sug, rosterSlots, live, teams, rounds };
+      const avail = getAvailability(b, draft);
+      const sug = HDA.suggest({ board: b, draft, rosterSlots, avail });
+      return { board: b, draft, sug, rosterSlots, live, teams, rounds, avail };
     }
 
     // ---------- actions ----------
@@ -344,6 +357,15 @@
       return out;
     }
 
+    function oddsRow(o, targets) {
+      if (!o || o.every((x) => x == null)) return '<div class="odds"><span class="na">no ESPN ADP \u2014 odds unavailable</span></div>';
+      return `<div class="odds">${o.map((x, i) => {
+        const pct = Math.round(x * 100);
+        const cls = pct >= 70 ? 'hi' : pct >= 30 ? 'mid' : 'lo';
+        return `<span class="o ${cls}" title="~${pct}% he's still there at pick #${targets[i]}">#${targets[i]} <b>${pct < 1 && x > 0 ? '<1' : pct > 99 && x < 1 ? '>99' : pct}%</b></span>`;
+      }).join('')}</div>`;
+    }
+
     function meta(p) {
       return `${esc(p.team || '')}${p.team && p.pos.length ? ' · ' : ''}${esc((p.pos || []).join('/'))}`;
     }
@@ -402,7 +424,13 @@
       const groups = HDA.tiers(c.board, c.draft);
       const labels = state.rankings.tierLabels || {};
       let firstHit = null;
+      const av = c.avail;
+      const showOdds = av && av.targets.length && av.sims;
       let html = `${renderSearch()}<div class="tools"><label><input type="checkbox" ${state.ui.hideDrafted ? 'checked' : ''} data-act="hideDrafted"> Hide drafted</label></div>`;
+      if (showOdds) {
+        html += `<div class="oddshead" title="Chance he's still on the board at each of your next turns, from ${av.sims.toLocaleString()} simulations of the rest of the draft using ESPN ADP. Recalculated after every pick.">
+          <span>Still there at your pick</span>${av.targets.map((t, i) => `<b>${['Next', '2nd', '3rd'][i]} \u00b7 #${t}</b>`).join('')}</div>`;
+      }
       if (!groups.length) return html + '<div class="empty">No rankings loaded. Open ⚙ to import your list.</div>';
       for (const g of groups) {
         let rows = g.players;
@@ -424,7 +452,8 @@
             if (!p.drafted && !firstHit && q) firstHit = p.key;
             html += `<li class="prow ${p.drafted ? 'gone' : ''} ${p.mine ? 'mine' : ''}" ${!p.drafted && firstHit === p.key ? `data-first-hit="${esc(p.key)}"` : ''}>
               <span class="rk">${p.myRank}</span>
-              <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${stats(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div></div>
+              <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${stats(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
+              ${showOdds && !p.drafted ? oddsRow(av.odds.get(p.key), av.targets) : ''}</div>
               <button class="sm" data-act="take" data-arg="${esc(p.key)}" title="${p.drafted ? 'Undo' : 'Mark as drafted'}">${p.drafted ? '↺' : '✓'}</button>
               <button class="sm ${p.mine ? 'on' : ''}" data-act="toggleMine" data-arg="${esc(p.key)}" title="Mine">Me</button>
             </li>`;
@@ -680,6 +709,14 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .ghostbtn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px}
 .ghostbtn.danger{color:var(--bad)}
 .muted{color:var(--muted)}
+.oddshead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;margin:4px 0 2px}
+.oddshead span{flex:1 1 100%;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.oddshead b{color:var(--ink);font-weight:600}
+.odds{display:flex;gap:5px;margin-top:3px;flex-wrap:wrap}
+.odds .o{font-size:11px;padding:1px 6px;border-radius:5px;background:var(--panel2);color:var(--muted);font-variant-numeric:tabular-nums}
+.odds .o b{font-weight:800}
+.odds .hi b{color:var(--good)}.odds .mid b{color:var(--warn)}.odds .lo b{color:var(--bad)}
+.odds .na{font-size:11px;color:var(--muted);font-style:italic}
 `;
 
   Object.assign(HDA, { createApp, storage, defaultSettings });

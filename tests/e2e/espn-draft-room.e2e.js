@@ -119,6 +119,10 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   check('fully drafted tiers show 0 left and fold away', /0\/2 left/.test(t1) && (await panel.locator('.tier').first().locator('.prow').count()) === 0, t1.replace(/\n/g, ' '));
   const goneCount = await panel.locator('.prow.gone').count();
   check('live tiers cross off drafted players', goneCount >= 3, `${goneCount} crossed off in open tiers`);
+  const oddsHead = await panel.locator('.oddshead').innerText();
+  check('My Tiers shows odds header for my next 3 turns', /#33/.test(oddsHead) && /#52/.test(oddsHead) && /#61/.test(oddsHead), oddsHead.replace(/\n/g, ' '));
+  const firstOdds = await panel.locator('.prow:not(.gone) .odds').first().innerText();
+  check('each available player shows 3 availability %s', (firstOdds.match(/%/g) || []).length === 3, firstOdds.replace(/\n/g, ' '));
   await page.screenshot({ path: path.join(OUT, '3-tiers.png') });
   await panel.locator('[data-search]').fill('giannis');
   const mineRow = await panel.locator('.prow.mine .nm').first().innerText();
@@ -159,8 +163,8 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await live.evaluate(() => window.addPick('V. Wembanyama'));
   await live.waitForFunction(() => /ON THE CLOCK/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
   const ltop = await lp.locator('.top-name').innerText();
-  check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Giannis Antetokounmpo/.test(ltop), ltop);
-  check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis/.test(ltop));
+  check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Shai Gilgeous-Alexander/.test(ltop), ltop);
+  check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis Antetokounmpo/.test(await lp.locator('.body').innerText()));
   // Last-name-only pick cell ("Doncic" -> Luka) also counts; DRAFT-button rows still don't.
   await live.evaluate(() => window.addPick('Doncic PG'));
   await live.waitForFunction(() => !/Luka Doncic/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.body').innerText), null, { timeout: 5000 }).catch(() => {});
@@ -168,13 +172,18 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   liveSocket.send('SELECTED 3 1002 {MINE}');
   await lp.locator('nav button', { hasText: 'My Team' }).click();
   await live.waitForTimeout(500);
-  check('my live pick lands on My Team', /Giannis Antetokounmpo/.test(await lp.locator('.body').innerText()));
+  check('my live pick lands on My Team', /Shai Gilgeous-Alexander/.test(await lp.locator('.body').innerText()));
   await lp.locator('nav button', { hasText: 'My Tiers' }).click();
   const lt1 = await lp.locator('.th').first().innerText();
   check('My Tiers: Tier 1 (Jokic, Wemby) fully crossed off', /0\/2 left/.test(lt1), lt1.replace(/\n/g, ' '));
-  await lp.locator('[data-search]').fill('giannis');
+  await lp.locator('[data-search]').fill('shai');
   check('My Tiers: my live pick shows as mine', (await lp.locator('.prow.mine .nm').count()) === 1);
   await lp.locator('[data-search]').fill('');
+  const oddsBefore = (await lp.locator('.odds').allInnerTexts()).join('|');
+  liveSocket.send('SELECTED 5 1010 {ODDS}'); // a player still on the board
+  await live.waitForTimeout(800);
+  const oddsAfter = (await lp.locator('.odds').allInnerTexts()).join('|');
+  check('availability odds recalculate after a pick', oddsBefore.length > 0 && oddsBefore !== oddsAfter);
   // Scrolling must survive background syncs and new picks.
   await lp.locator('.body').evaluate((el) => { el.scrollTop = 900; });
   const before = await lp.locator('.body').evaluate((el) => el.scrollTop);

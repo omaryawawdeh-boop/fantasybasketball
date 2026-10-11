@@ -1,9 +1,9 @@
 rank,player,tier,team,pos,flags,note
 1,Nikola Jokic,1,DEN,C,,Best points player alive. 55 double doubles and triple double bonuses.
 2,Victor Wembanyama,1,SAS,C,*,"3.1 blocks a game, and blocks are worth 3 points. Starred injury prone, so watch his minutes."
-3,Giannis Antetokounmpo,2,MIA,PF/C,,"Now in Miami next to Bam. Played 36 games last year, so his role and health are both questions."
-4,Luka Doncic,2,LAL,PG/SG,*,Top 2 in your scoring. Reaves is back. Kessler starts next to him.
-5,Shai Gilgeous-Alexander,2,OKC,PG,,"Safest top 5 pick. 68 games, elite scoring and steals."
+3,Shai Gilgeous-Alexander,2,OKC,PG,,"Safest top 5 pick. 68 games, elite scoring and steals."
+4,Giannis Antetokounmpo,2,MIA,PF/C,,"Now in Miami next to Bam. Played 36 games last year, so his role and health are both questions."
+5,Luka Doncic,2,LAL,PG/SG,*,Top 2 in your scoring. Reaves is back. Kessler starts next to him.
 6,Cade Cunningham,2,DET,PG/SG,,Near 10 assists a game with 38 double doubles. Strong floor.
 7,Jalen Johnson,3,ATL,SF/PF,,"49 double doubles. Yahoo/ESPN have him 20th, but he grades out 6th in your scoring. Keep him here."
 8,Jayson Tatum,3,BOS,SF/PF,,Played 16 games after his Achilles. Full season this year. Points math is low only because of the small sample.
@@ -18,44 +18,44 @@ rank,player,tier,team,pos,flags,note
 17,Amen Thompson,4,HOU,PG/SG/SF/PF,,"37.4 minutes a game, played 79 games. Steady."
 18,Alperen Sengün,4,HOU,PF/C,,Double doubles plus steals and blocks. A points league monster.
 19,Cooper Flagg,4,DAL,SG/SF/PF/PG,DR,Year 2 breakout pick. Kyrie is back. Grades out 34th in your scoring.
-20,Stephen Curry,5,GSW,PG,*,"Age 38, played 43 games. Expect some rest days."
-21,Jalen Brunson,5,NYK,PG,,"Almost no steals or blocks, and those count triple here."
-22,Jamal Murray,5,DEN,PG/SG,*,Played 75 games. Grades out 18th in your scoring.
-23,Evan Mobley,5,CLE,PF/C,,
-24,James Harden,5,CLE,PG/SG,,
-25,Kevin Durant,5,HOU,SG/SF/PF,,Played 78 games at age 38. The market takes him around 14 to 17.
-26,Devin Booker,5,PHX,PG/SG/SF,,Grades out 36th in your scoring. The market pays for his name.
-27,Jalen Duren,5,DET,C,,41 double doubles.
-28,Paolo Banchero,5,ORL,PF/SF,DR,
-29,Jaylen Brown,5,PHI,SG/SF/PF,,"Now in Philly with Maxey, LeBron and Embiid. His usage takes a hit."
-30,Bam Adebayo,5,MIA,PF/C,,Giannis arrival cuts his touches.
-31,LaMelo Ball,6,MIN,PG,*,Now in Minnesota. Starred injury prone.
-32,Pascal Siakam,6,IND,PF/C/SF,,
-33,Walker Kessler,6,LAL,C,DR,"Starting C next to Luka. Jammed finger in preseason, coach not concerned. Played 5 games last year."
-34,Deni Avdija,6,POR,SG/SF/PF,,"Starting in Portland. Sharpe is out about 6 months, which helps his usage."
-35,Brandon Miller,6,CHA,SF/PF/SG,DR,"Yahoo/ESPN 68, consensus 53. Still ranked high here."
-36,Michael Porter Jr.,6,BKN,SF/PF,,Day to day. Grades out 33rd in your scoring.
-37,Kawhi Leonard,6,TOR,SG/SF/PF,*,"Now in Toronto, age 35. Has not played 70 games since 2017."
-38,Julius Randle,6,BKN,PF,,Big usage in Brooklyn.
-39,Franz Wagner,6,ORL,SF/PF,,
-40,Austin Reaves,6,LAL,PG/SG/SF,*,Yahoo has him 20th. Missed preseason time.
-41,Jaren Jackson Jr.,6,UTA,PF/C,DR,"Nurkic is out 4+ weeks, so more center minutes for him early."
-42,LeBron James,6,PHI,SF/PF,*,Turns 42. Philly will rest him for the playoffs. Grades out 28th in your scoring.
-43,Ivica Zubac,7,IND,C,,Starting C next to Haliburton.
-44,Lauri Markkanen,7,UTA,SF/PF,,Played 42 games. Grades out 19th in your scoring.
-45,Jalen Williams,7,OKC,SF/PF/SG,,Healthy after an injury year. Could have a career season.
-46,Donovan Clingan,7,POR,C,DR,"37 double doubles, 1.7 blocks."
+20,Jalen Brunson,5,NYK,PG,,"Almost no steals or blocks, and those count triple here."
+21,Jamal Murray,5,DEN,PG/SG,*,Played 75 games. Grades out 18th in your scoring.
+22,Evan Mobley,5,CLE,PF/C,,
+23,James Harden,5,CLE,PG/SG,,
+24,Kevin Durant,5,HOU,SG/SF/PF,,Played 78 games at age 38. The market takes him around 14 to 17.
+25,Devin Booker,5,PHX,PG/SG/SF,,Grades out 36th in your scoring. The market pays for his name.
+26,Jalen Duren,5,DET,C,,41 double doubles.
+27,Paolo Banchero,5,ORL,PF/SF,DR,
+28,Jaylen Brown,5,PHI,SG/SF/PF,,"Now in Philly with Maxey, LeBron and Embiid. His usage takes a hit."
+29,Bam Adebayo,5,MIA,PF/C,,Giannis arrival cuts his touches.
+30,LaMelo Ball,5,MIN,PG,*,Now in Minnesota. Starred injury prone.
+31,Pascal Siakam,6,IND,PF/C/SF,,
+32,Stephen Curry,6,GSW,PG,*,"Age 38, played 43 games. Expect some rest days."
+33,Deni Avdija,6,POR,SG/SF/PF,,"Starting in Portland. Sharpe is out about 6 months, which helps his usage."
+34,Julius Randle,6,BKN,PF,,Big usage in Brooklyn.
+35,Franz Wagner,6,ORL,SF/PF,,
+36,Austin Reaves,6,LAL,PG/SG/SF,*,Yahoo has him 20th. Missed preseason time.
+37,Jaren Jackson Jr.,6,UTA,PF/C,DR,"Nurkic is out 4+ weeks, so more center minutes for him early."
+38,Brandon Miller,6,CHA,SF/PF/SG,DR,"Yahoo/ESPN 68, consensus 53. Still ranked high here."
+39,LeBron James,6,PHI,SF/PF,*,Turns 42. Philly will rest him for the playoffs. Grades out 28th in your scoring.
+40,Michael Porter Jr.,6,BKN,SF/PF,,Day to day. Grades out 33rd in your scoring.
+41,Walker Kessler,6,LAL,C,DR,"Starting C next to Luka. Jammed finger in preseason, coach not concerned. Played 5 games last year."
+42,Ivica Zubac,6,IND,C,,Starting C next to Haliburton.
+43,Lauri Markkanen,7,UTA,SF/PF,,Played 42 games. Grades out 19th in your scoring.
+44,Jalen Williams,7,OKC,SF/PF/SG,,Healthy after an injury year. Could have a career season.
+45,Donovan Clingan,7,POR,C,DR,"37 double doubles, 1.7 blocks."
+46,Kawhi Leonard,7,TOR,SG/SF/PF,*,"Now in Toronto, age 35. Has not played 70 games since 2017."
 47,Zion Williamson,7,NOP,PF/C/SF,*,Has passed 60 games twice in 7 seasons.
 48,Chet Holmgren,7,OKC,PF/C,* DR,1.9 blocks a game. Yahoo has him 18th.
 49,Kyrie Irving,7,DAL,PG/SG,*,Back from an ACL tear that cost nearly two years.
 50,Darius Garland,7,LAC,PG,*,
 51,De'Aaron Fox,7,SAS,PG/SG,*,
-52,Brandon Ingram,7,LAC,SG/SF/PF,*,
-53,Tyler Herro,7,MIL,PG/SG,*,
-54,Ja Morant,7,POR,PG,*,
-55,Keyonte George,7,UTA,PG/SG,DR,
-56,Nickeil Alexander-Walker,7,ATL,PG/SG/SF,,
-57,Desmond Bane,8,ORL,SG/SF,,
+52,Tyler Herro,7,MIL,PG/SG,*,
+53,Ja Morant,7,POR,PG,*,
+54,Keyonte George,7,UTA,PG/SG,DR,
+55,Nickeil Alexander-Walker,7,ATL,PG/SG/SF,,
+56,Desmond Bane,7,ORL,SG/SF,,
+57,Brandon Ingram,8,LAC,SG/SF/PF,*,
 58,OG Anunoby,8,NYK,SF/PF,,
 59,Derrick White,8,BOS,PG/SG,,
 60,Joel Embiid,8,PHI,C,,"Played 38 games, but grades out 11th per game. Value if he slides past round 4."
@@ -74,10 +74,10 @@ rank,player,tier,team,pos,flags,note
 73,Kon Knueppel,9,CHA,SG/SF/PG,,"Hamstring. Out for preseason, opening night uncertain."
 74,Mikal Bridges,9,NYK,SF/PF/SG,,
 75,Caleb Wilson,9,CHI,PF/SF,ROOKIE,Starter in Chicago. 2.5 blocks a game in Summer League.
-76,Paul George,9,BOS,SF/PF,*,Played 37 games. Grades out 64th in your scoring.
-77,AJ Dybantsa,9,WAS,SF,ROOKIE,"No. 1 pick and focal point, but shares the ball with Trae and Davis."
-78,Ausar Thompson,9,DET,SG/SF/PF,,"2 steals a game, but only 9.9 points."
-79,Darryn Peterson,9,UTA,SG/PG,ROOKIE,Locked in as a starter in a crowded Utah backcourt. Slow start expected.
+76,AJ Dybantsa,9,WAS,SF,ROOKIE,"No. 1 pick and focal point, but shares the ball with Trae and Davis."
+77,Ausar Thompson,9,DET,SG/SF/PF,,"2 steals a game, but only 9.9 points."
+78,Darryn Peterson,9,UTA,SG/PG,ROOKIE,Locked in as a starter in a crowded Utah backcourt. Slow start expected.
+79,Paul George,9,BOS,SF/PF,*,Played 37 games. Grades out 64th in your scoring.
 80,Fred VanVleet,9,HOU,PG/SG,,"Torn ACL, missed all of last year. Age 32."
 81,Jaden McDaniels,9,MIN,SF/PF,,Grades out 117th in your scoring.
 82,Myles Turner,9,MIL,C,,

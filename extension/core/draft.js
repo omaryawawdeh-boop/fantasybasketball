@@ -266,6 +266,78 @@
     return Math.min(1, Math.max(0, p));
   }
 
+  // ---------- availability odds (Monte Carlo) ----------
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /**
+   * Chance each available player is still there at your next 1..horizons
+   * turns, from simulating the rest of the draft from the CURRENT board.
+   *
+   * Model: every remaining pick (yours included, assuming you take someone
+   * else) goes to the available player with the lowest "draft spot", drawn
+   * per simulation as ADP + noise (spread grows with ADP, as real ADP spreads
+   * do). Because each run starts from who is actually left, the odds react to
+   * runs, reaches and fallers after every pick. Seeded, so numbers only move
+   * when the draft does.
+   *
+   * @returns {{targets:number[], odds: Map<string, Array<number|null>>, sims:number}}
+   */
+  function availabilityOdds({ board, draft, sims = 2000, horizons = 3 }) {
+    const odds = new Map();
+    const upcoming = (draft.myPickNumbers || []).filter((n) => n >= draft.currentPick);
+    const targets = (draft.onClock ? upcoming.slice(1) : upcoming).slice(0, horizons);
+    if (!targets.length || draft.complete) return { targets, odds, sims: 0 };
+    const picksBefore = targets.map((t) => t - draft.currentPick); // picks made before each of your turns
+    const maxK = picksBefore[picksBefore.length - 1];
+
+    const available = board.players.filter((p) => !draft.drafted.has(p.key));
+    const withAdp = available.filter((p) => p.adp > 0).sort((a, b) => a.adp - b.adp);
+    // Players far beyond the window can't affect who's left; cap the pool for speed.
+    const lastAdp = withAdp.length ? withAdp[Math.min(withAdp.length - 1, maxK + 120)].adp : 0;
+    const pool = withAdp.filter((p) => p.adp <= Math.max(lastAdp, draft.currentPick + maxK + 60));
+    const n = pool.length;
+    const mean = pool.map((p) => p.adp);
+    // Spread: ~1 pick for the top few, ~5 at ADP 30, ~15 at ADP 100 (typical ADP min-max ranges).
+    const sd = pool.map((p) => Math.max(1, 0.15 * p.adp + 0.5));
+    const survive = targets.map(() => new Float64Array(n));
+    const rnd = mulberry32(draft.currentPick * 7919 + draft.drafted.size * 104729 + n);
+    const score = new Float64Array(n);
+    const order = new Array(n);
+
+    for (let s = 0; s < sims; s++) {
+      for (let i = 0; i < n; i += 2) {
+        // Box-Muller: two normals per pair of uniforms.
+        const u = Math.max(rnd(), 1e-12), v = rnd();
+        const r = Math.sqrt(-2 * Math.log(u));
+        score[i] = mean[i] + sd[i] * r * Math.cos(2 * Math.PI * v);
+        if (i + 1 < n) score[i + 1] = mean[i + 1] + sd[i + 1] * r * Math.sin(2 * Math.PI * v);
+      }
+      for (let i = 0; i < n; i++) order[i] = i;
+      order.sort((a, b) => score[a] - score[b]);
+      for (let pos = 0; pos < n; pos++) {
+        const i = order[pos];
+        for (let h = 0; h < targets.length; h++) if (pos >= picksBefore[h]) survive[h][i]++;
+      }
+    }
+    pool.forEach((p, i) => odds.set(p.key, survive.map((arr) => arr[i] / sims)));
+    // Available players outside the simulated pool: ADP far past your window -> safe.
+    for (const p of available) {
+      if (odds.has(p.key)) continue;
+      odds.set(p.key, p.adp > 0 ? targets.map(() => 1) : targets.map(() => null));
+    }
+    return { targets, odds, sims };
+  }
+
   // ---------- suggestions ----------
 
   /**
@@ -275,7 +347,7 @@
    * tags and the chance a player survives to your next pick are attached as
    * notes so you can see them at a glance — never applied as re-ranking.
    */
-  function suggest({ board, draft, rosterSlots = DEFAULT_ROSTER, limit = 6, depth = 30 }) {
+  function suggest({ board, draft, rosterSlots = DEFAULT_ROSTER, limit = 6, depth = 30, avail = null }) {
     const available = board.players.filter((p) => !draft.drafted.has(p.key));
     const listAvail = available.filter((p) => p.onList);
     const usingList = board.hasList && listAvail.length > 0;
@@ -294,7 +366,8 @@
         if (left === 1) notes.push({ kind: 'tier', text: `Last one left in Tier ${p.tier}` });
         else if (left === 2) notes.push({ kind: 'tier', text: `2 left in Tier ${p.tier}` });
       }
-      const pGone = probGoneBefore(p.adp, draft.currentPick, nextTurn);
+      const sim = avail && avail.targets[0] === nextTurn ? avail.odds.get(p.key) : null;
+      const pGone = sim && sim[0] != null ? 1 - sim[0] : probGoneBefore(p.adp, draft.currentPick, nextTurn);
       if (pGone != null && nextTurn) {
         const pct = Math.round(pGone * 100);
         notes.push(pGone >= 0.95
@@ -339,7 +412,7 @@
 
   Object.assign(HDA, {
     SLOT_ELIGIBILITY, DEFAULT_ROSTER, buildBoard, mergePicks, pickKey, ownerSlot, pickNumbersForSlot, computeDraft,
-    dedicatedSlotsFilled, normalCdf, probGoneBefore, suggest, tiers,
+    dedicatedSlotsFilled, normalCdf, probGoneBefore, availabilityOdds, suggest, tiers,
   });
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
