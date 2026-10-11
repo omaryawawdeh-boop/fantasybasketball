@@ -6,7 +6,7 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
 
 - **Your order is law.** The top suggestion is always the highest-ranked player on *your* board who's still available. Nothing reorders your list.
 - **Syncs with ESPN automatically.** Works in mock and real drafts. It reads picks, teams, draft order, roster slots and scoring from ESPN's own draft-room requests (with your existing ESPN login) every ~3 seconds. Drafted players get crossed off and your picks go to My Team.
-- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 9* has 167 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
+- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 10* has 167 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
 - **Context, not overrides.** Each player shows notes for the last player left in a tier, the chance he's gone before your next pick (from ESPN ADP), open-slot needs, and ESPN injury status. DR players get a badge and a plain note ("you like him here; market ADP 40"). DR never changes the order or suggests someone else.
 
 ## Install (2 minutes, Chrome / Edge / Brave)
@@ -34,7 +34,7 @@ To practice, start an ESPN mock draft (fantasy.espn.com → Basketball → Mock 
 | Tab | What it does |
 | --- | --- |
 | **Suggestions** | Who to take now (your top available player), the DR call, your next 5, and who's probably still there at your next pick |
-| **My Tiers** | Your full board by tier with drafted players crossed off, your picks in blue, and a "left in tier" meter. Fully drafted tiers fold away. Type a name and press Enter to mark him drafted. |
+| **My Tiers** | Your full board by tier, with each available player's **chance of still being there at your next 3 picks**. It comes from 2,000 simulations of the rest of the draft from the current board, using ESPN ADP, and recalculates after every pick. with drafted players crossed off, your picks in blue, and a "left in tier" meter. Fully drafted tiers fold away. Type a name and press Enter to mark him drafted. |
 | **My Team** | Your roster, which starting slots are still empty, position counts, and projected FP/G in your scoring |
 | **Picks** | Every pick so far with team names. Undo and "Me" fix-ups. |
 

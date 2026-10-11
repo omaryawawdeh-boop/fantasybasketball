@@ -410,7 +410,7 @@
       html += '</ol>';
       if (sug.likelyAtNext.length && !draft.complete) {
         html += `<div class="sec">Probably still there at #${draft.myFollowingPick}</div><div class="chips">${sug.likelyAtNext.map((x) => `<span class="chip">${esc(x.player.name)} <i>${Math.round(x.pAvail * 100)}%</i></span>`).join('')}</div>`;
-        html += '<div class="foot">Availability % is an estimate from ESPN ADP (normal spread around ADP), not a guarantee.</div>';
+        html += '<div class="foot">Availability % comes from simulating the rest of the draft 2,000 times from the current board using ESPN ADP. It’s an estimate, not a guarantee, and it updates after every pick.</div>';
       }
       return html;
     }
