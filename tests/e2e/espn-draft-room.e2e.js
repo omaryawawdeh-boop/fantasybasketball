@@ -68,11 +68,26 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
     body: `<!doctype html><html><body style="font-family:sans-serif">
       <div class="draft-header"><div class="pick-message">Your autopick would be: Nikola Jokic</div></div>
       <div class="picks-carousel" id="car"></div>
-      <div class="board-players"><table>
-        <tr><td>Giannis Antetokounmpo</td><td><button>DRAFT</button></td></tr>
-        <tr><td>Luka Doncic</td><td><button>DRAFT</button></td></tr>
-      </table></div>
+      <div class="players-tab">
+        <input placeholder="Player Name" id="q">
+        <div class="board-players"><table id="tbl"></table></div>
+      </div>
       <script>
+        // Fake ESPN player list: first 8 shown, the rest only via the search box.
+        const NAMES = ${JSON.stringify(HDA.DEFAULT_RANKINGS.slice(0, 40).map((p) => p.name))};
+        window.__clicks = [];
+        const draw = () => {
+          const q = document.getElementById('q').value.toLowerCase();
+          const rows = q ? NAMES.filter((n) => n.toLowerCase().includes(q)) : NAMES.slice(0, 8);
+          document.getElementById('tbl').innerHTML = rows.map((n) => '<tr><td><span class="name">' + n + '</span></td><td><button>DRAFT</button></td><td><button>QUEUE</button></td></tr>').join('');
+        };
+        document.addEventListener('DOMContentLoaded', () => {
+          draw();
+          document.getElementById('q').addEventListener('input', draw);
+          document.getElementById('tbl').addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') window.__clicks.push(e.target.textContent + ':' + e.target.closest('tr').querySelector('.name').textContent);
+          });
+        });
         window.addPick = (t) => { const d = document.createElement('div'); d.className = 'pick__player'; d.textContent = t; document.getElementById('car').appendChild(d); };
         new WebSocket('wss://fantasydraft.espn.com/game/fba/5555');
       </script></body></html>`,
@@ -133,6 +148,12 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   const team = await panel.locator('.body').innerText();
   check('My Team lists Giannis with FP/G from league scoring', /Giannis/.test(team) && /FP\/G/.test(team));
   await page.screenshot({ path: path.join(OUT, '4-my-team.png') });
+  await panel.locator('nav button', { hasText: 'Plan' }).click();
+  await panel.locator('.plan .prow').first().waitFor({ timeout: 8000 });
+  const planRows = await panel.locator('.plan .prow').count();
+  check('Plan tab plans every remaining pick (12 after my first)', planRows === 12, `${planRows} rows`);
+  check('Plan shows projected team balance', (await panel.locator('.teamstrip').count()) >= 1);
+  await page.screenshot({ path: path.join(OUT, '10-plan.png') });
 
   // Manual search + Enter marks first match drafted (ESPN lag case).
   await panel.locator('nav button', { hasText: 'My Tiers' }).click();
@@ -157,12 +178,33 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await lp.locator('.sync.ok').waitFor({ timeout: 15000 });
   for (let i = 0; i < 50 && !liveSocket; i++) await live.waitForTimeout(100);
   check('draft room live connection observed', !!liveSocket);
+  // Not on the clock (pick 1, I'm 3rd): the panel offers QUEUE, which clicks ESPN's QUEUE button.
+  await lp.locator('.top [data-act="espn"]').first().click();
+  await live.waitForTimeout(400);
+  const qClicks = await live.evaluate(() => window.__clicks.slice());
+  check('panel "Queue" clicks ESPN\'s QUEUE button for that player', qClicks.some((c) => /^QUEUE:/.test(c)), qClicks.join(', '));
   liveSocket.send('SELECTED 1 1000 {AAAA-BBBB}');
   await live.waitForFunction(() => /Pick 2\b/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
   check('live-feed pick crosses off Jokic within seconds', !/Nikola Jokic/.test(await lp.locator('.top-name').innerText()));
   await live.evaluate(() => window.addPick('V. Wembanyama'));
   await live.waitForFunction(() => /ON THE CLOCK/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
   const ltop = await lp.locator('.top-name').innerText();
+  // On the clock: "Draft" needs two taps, then clicks ESPN's DRAFT button (searching ESPN's list if needed).
+  await lp.locator('nav button', { hasText: 'My Tiers' }).click();
+  await lp.locator('[data-search]').fill('maxey');
+  const dBtn = lp.locator('.prow [data-act="espn"]').first();
+  check('on the clock the panel button reads "Draft"', /Draft/.test(await dBtn.innerText()));
+  await dBtn.click();
+  check('first tap only arms it ("Tap again to draft")', /Tap again/.test(await dBtn.innerText()) && !(await live.evaluate(() => window.__clicks.some((c) => c.startsWith('DRAFT')))));
+  await dBtn.click();
+  await live.waitForFunction(() => window.__clicks.some((c) => c.startsWith('DRAFT:')), null, { timeout: 6000 }).catch(() => {});
+  const dClicks = await live.evaluate(() => window.__clicks.slice());
+  check('second tap: ESPN search used, DRAFT clicked for Tyrese Maxey', dClicks.includes('DRAFT:Tyrese Maxey'), dClicks.join(', '));
+  await live.waitForTimeout(600);
+  const qv = await live.evaluate(() => document.getElementById('q').value);
+  check('ESPN search box cleared afterwards', qv === '', JSON.stringify(qv));
+  await lp.locator('[data-search]').fill('');
+  await lp.locator('nav button', { hasText: 'Suggestions' }).click();
   check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Shai Gilgeous-Alexander/.test(ltop), ltop);
   check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis Antetokounmpo/.test(await lp.locator('.body').innerText()));
   // Last-name-only pick cell ("Doncic" -> Luka) also counts; DRAFT-button rows still don't.

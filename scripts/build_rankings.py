@@ -42,7 +42,7 @@ DOB_FALLBACK = {
     'Draymond Green': '1990-03-04',
 }
 
-LEAGUE = {'espnLeagueId': 888634487, 'private': True, 'teams': 14, 'rounds': 13, 'format': 'H2H_POINTS',
+LEAGUE = {'espnLeagueId': 888634487, 'private': True, 'teams': 14, 'mySlot': 4, 'rounds': 13, 'format': 'H2H_POINTS',
           'rosterSlots': {'PG': 1, 'SG': 1, 'SF': 1, 'PF': 1, 'C': 1, 'G': 1, 'F': 1, 'UTIL': 3, 'BE': 3},
           'scoringWeights': {'FGM': 2, 'FTM': 1, '3PM': 1, 'REB': 1, 'AST': 1, 'STL': 3, 'BLK': 3, 'TO': -1, 'DD': 3, 'TD': 5}}
 

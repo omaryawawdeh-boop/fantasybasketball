@@ -3,7 +3,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const { storage } = HDA;
 
-  let settings = { ...HDA.defaultSettings(), ...(await storage.get('hda:settings', {})) };
+  let settings = HDA.migrateSettings({ ...HDA.defaultSettings(), ...(await storage.get('hda:settings', {})) });
   let rankings = await storage.get('hda:rankings', null);
   const defaults = () => ({ players: HDA.DEFAULT_RANKINGS, tierLabels: HDA.DEFAULT_TIER_LABELS, source: 'default' });
   if (!rankings || rankings.source === 'default' || !rankings.players || !rankings.players.length) rankings = defaults();
@@ -125,7 +125,7 @@
   // ----- draft defaults -----
   for (const k of ['teams', 'rounds', 'mySlot']) {
     $(k).value = settings[k];
-    $(k).oninput = (e) => { const v = Number(e.target.value); if (v > 0) { settings[k] = v; saveSettings(); } };
+    $(k).oninput = (e) => { const v = Number(e.target.value); if (v > 0) { settings[k] = v; if (k === 'mySlot') settings.mySlotSource = 'user'; saveSettings(); } };
   }
   $('side').value = settings.side;
   $('side').onchange = (e) => { settings.side = e.target.value; saveSettings(); };
@@ -199,7 +199,7 @@
     $('fitG').value = t.G; $('fitF').value = t.F; $('fitC').value = t.C;
     $('fitOldAge').value = f.oldAge ?? HDA.DEFAULT_FIT.oldAge;
     $('fitMaxOld').value = f.maxOld ?? HDA.DEFAULT_FIT.maxOld;
-    $('fitMaxProne').value = f.maxProne ?? HDA.DEFAULT_FIT.maxProne;
+    $('fitMaxProne').value = f.maxRisky ?? (f.maxProne != null ? f.maxProne + 1 : HDA.DEFAULT_FIT.maxRisky);
   }
   for (const id of ['fitG', 'fitF', 'fitC', 'fitOldAge', 'fitMaxOld', 'fitMaxProne']) {
     $(id).oninput = () => {
@@ -208,7 +208,7 @@
         targets: { G: n('fitG'), F: n('fitF'), C: n('fitC') },
         oldAge: n('fitOldAge') || HDA.DEFAULT_FIT.oldAge,
         maxOld: n('fitMaxOld'),
-        maxProne: n('fitMaxProne'),
+        maxRisky: n('fitMaxProne'),
       };
       saveSettings();
     };

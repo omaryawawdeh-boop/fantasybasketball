@@ -35,7 +35,7 @@
     return {
       teams: L.teams || 12,
       rounds: L.rounds || 13,
-      mySlot: 1,
+      mySlot: L.mySlot || 1,
       rosterSlots: { ...(L.rosterSlots || HDA.DEFAULT_ROSTER) },
       scoringWeights: { ...(L.scoringWeights || HDA.SCORING_PRESETS.espn_points.weights) },
       useLeagueScoring: true,
@@ -44,6 +44,16 @@
       myTeamIds: {}, // ESPN leagueId -> your teamId (set in Options)
       side: 'right',
     };
+  }
+
+  // Your known draft slot becomes the default once; a slot you set yourself always wins.
+  function migrateSettings(st) {
+    const L = HDA.DEFAULT_LEAGUE || {};
+    if (L.mySlot && st.mySlotSource !== 'user' && st.mySlotFrom !== L.mySlot) {
+      st.mySlot = L.mySlot;
+      st.mySlotFrom = L.mySlot;
+    }
+    return st;
   }
 
   async function loadRankings() {
@@ -73,7 +83,7 @@
   async function createApp({ host, mode, draftId, myTeamId = null, sync = mode === 'espn' }) {
     const shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     const state = {
-      settings: { ...defaultSettings(), ...(await storage.get('hda:settings', {})) },
+      settings: migrateSettings({ ...defaultSettings(), ...(await storage.get('hda:settings', {})) }),
       rankings: await loadRankings(),
       local: { picks: [], taken: [], mineOverrides: {}, live: [], ignored: [], ...(await storage.get(`hda:draft:${draftId}`, {})) },
       sources: { ws: false, dom: false },
@@ -120,6 +130,19 @@
         availSig = sig;
       }
       return availCache;
+    }
+
+    // Full-draft plan: odds for ALL your remaining picks (heavier), only when the Plan tab is open.
+    let planCache = null;
+    let planSig = '';
+    function getPlan(c) {
+      const sig = `${availSig}|${JSON.stringify(state.settings.fit || {})}`;
+      if (!planCache || sig !== planSig) {
+        const odds = HDA.availabilityOdds({ board: c.board, draft: c.draft, sims: 1000, horizons: c.rounds });
+        planCache = HDA.draftPlan({ board: c.board, draft: c.draft, rosterSlots: c.rosterSlots, fit: state.settings.fit || {}, odds });
+        planSig = sig;
+      }
+      return planCache;
     }
 
     function espnLive() {
@@ -218,6 +241,26 @@
         else location.href = '../options/options.html';
       },
       retry() { if (api.onRetry) api.onRetry(); },
+      /** Draft (on the clock) or queue (otherwise) on ESPN itself. Drafting needs a second tap. */
+      async espn(key, el) {
+        const c = compute();
+        const p = c.board.byKey.get(key);
+        if (!p || !api.espnAction) return;
+        const kind = c.draft.onClock ? 'draft' : 'queue';
+        if (kind === 'draft' && el && el.dataset.armed !== '1') {
+          el.dataset.armed = '1';
+          el.dataset.label = el.textContent;
+          el.textContent = 'Tap again to draft';
+          el.classList.add('armed');
+          setTimeout(() => { if (el.isConnected && el.dataset.armed === '1') { el.dataset.armed = ''; el.textContent = el.dataset.label; el.classList.remove('armed'); } }, 4000);
+          return;
+        }
+        if (el) { el.disabled = true; el.textContent = kind === 'draft' ? 'Drafting\u2026' : 'Queuing\u2026'; }
+        let res;
+        try { res = await api.espnAction(p, kind); } catch (e) { res = { ok: false, message: e.message }; }
+        toast(res.message, res.ok ? 'ok' : 'bad');
+        render();
+      },
       async copyReport(_, el) {
         const text = buildReport();
         try { await navigator.clipboard.writeText(text); } catch (e) {
@@ -228,8 +271,17 @@
     };
 
     // ---------- render ----------
-    shadow.innerHTML = `<style>${CSS}</style><div class="hda" part="panel"></div>`;
+    shadow.innerHTML = `<style>${CSS}</style><div class="hda" part="panel"></div><div class="toast" hidden></div>`;
     const rootEl = shadow.querySelector('.hda');
+    const toastEl = shadow.querySelector('.toast');
+    let toastTimer = null;
+    function toast(msg, kind = 'ok') {
+      toastEl.textContent = msg;
+      toastEl.className = `toast t-${kind} side-${state.settings.side}`;
+      toastEl.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toastEl.hidden = true; }, kind === 'bad' ? 7000 : 4000);
+    }
 
     rootEl.addEventListener('click', (ev) => {
       const el = ev.target.closest('[data-act]');
@@ -251,6 +303,7 @@
         if (el.dataset.setting === 'syncMode') v = el.checked ? 'manual' : 'auto';
         if (el.type === 'number' && (!v || v < 1)) return;
         state.settings[el.dataset.setting] = v;
+        if (el.dataset.setting === 'mySlot') state.settings.mySlotSource = 'user';
         storage.set('hda:settings', state.settings);
         if (el.dataset.setting === 'syncMode') render();
         else renderBody(true);
@@ -296,7 +349,7 @@
       const c = compute();
       const status = rootEl.querySelector('.clock');
       if (status) status.outerHTML = renderClock(c);
-      const tabs = { pick: renderPick, tiers: renderTiers, team: renderTeam, picks: renderPicks }[state.ui.tab] || renderPick;
+      const tabs = { pick: renderPick, tiers: renderTiers, plan: renderPlan, team: renderTeam, picks: renderPicks }[state.ui.tab] || renderPick;
       const keep = body.scrollTop;
       body.innerHTML = tabs(c);
       body.scrollTop = keep;
@@ -341,7 +394,7 @@
           ${state.espn.status === 'error' ? '<button class="link" data-act="retry">retry</button>' : ''}</div>
         <div class="clock"></div>
         <nav>
-          ${[['pick', 'Suggestions'], ['tiers', 'My Tiers'], ['team', 'My Team'], ['picks', 'Picks']].map(([k, l]) => `<button class="${state.ui.tab === k ? 'on' : ''}" data-act="tab" data-arg="${k}">${l}</button>`).join('')}
+          ${[['pick', 'Suggestions'], ['tiers', 'My Tiers'], ['plan', 'Plan'], ['team', 'My Team'], ['picks', 'Picks']].map(([k, l]) => `<button class="${state.ui.tab === k ? 'on' : ''}" data-act="tab" data-arg="${k}">${l}</button>`).join('')}
         </nav>
       </header>`;
     }
@@ -384,6 +437,13 @@
       return parts.join('');
     }
 
+    function espnBtn(p, c, big) {
+      if (!api.espnAction || c.draft.complete) return '';
+      const label = c.draft.onClock ? 'Draft' : 'Queue';
+      const title = c.draft.onClock ? `Draft ${p.name} on ESPN (tap twice)` : `Add ${p.name} to your ESPN queue (autopick uses it if your clock runs out)`;
+      return `<button class="${big ? 'act espn' : 'sm espn'} ${c.draft.onClock ? 'onclock' : ''}" data-act="espn" data-arg="${esc(p.key)}" title="${esc(title)}">${label}</button>`;
+    }
+
     function fitChips(fit, kinds = ['bad', 'warn', 'good']) {
       if (!fit) return '';
       const fl = fit.flags.filter((f) => kinds.includes(f.kind) || (f.kind === 'info' && kinds.includes('info')));
@@ -400,10 +460,11 @@
         return `<span class="tb ${cls}" title="${label}: ${have.toFixed(1).replace('.0', '')} of a ${targets[b]}-player target">${b} <b>${(Math.round(have * 2) / 2)}</b>/${targets[b]}</span>`;
       };
       const oldCls = profile.old.length > cfg.maxOld ? 'over' : profile.old.length === cfg.maxOld ? 'full' : '';
-      const proneCls = profile.prone.length > cfg.maxProne ? 'over' : profile.prone.length === cfg.maxProne ? 'full' : '';
+      const nr = (profile.risky || []).length;
+      const proneCls = nr > cfg.maxRisky ? 'over' : nr === cfg.maxRisky ? 'full' : '';
       return `<div class="teamstrip"><span class="tl">Your team</span>${cell('G', 'Guards')}${cell('F', 'Forwards')}${cell('C', 'Centers')}
         <span class="tb ${oldCls}" title="Players age ${cfg.oldAge}+ (comfortable max ${cfg.maxOld})">${cfg.oldAge}+ <b>${profile.old.length}</b>/${cfg.maxOld}</span>
-        <span class="tb ${proneCls}" title="Injury-prone (*) players (comfortable max ${cfg.maxProne})">INJ* <b>${profile.prone.length}</b>/${cfg.maxProne}</span></div>`;
+        <span class="tb ${proneCls}" title="Players with medium/high injury risk (*, few games last season, age, ESPN status). Comfortable max ${cfg.maxRisky}">Inj risk <b>${nr}</b>/${cfg.maxRisky}</span></div>`;
     }
 
     function renderPick(c) {
@@ -431,7 +492,7 @@
           ${top.player.note ? `<div class="pnote">${esc(top.player.note)}</div>` : ''}
           <ul class="notes">${noteHtml(top)}</ul>
         </div>
-        <button class="act" data-act="take" data-arg="${esc(top.player.key)}" title="Mark as drafted">${c.live ? 'Taken' : 'Drafted'}</button>
+        <div class="btncol">${espnBtn(top.player, c, true)}<button class="${api.espnAction ? 'sm' : 'act'}" data-act="take" data-arg="${esc(top.player.key)}" title="Mark as drafted (someone took him)">${c.live ? 'Taken' : 'Drafted'}</button></div>
       </div>`;
       if (fp && fp.instead) {
         const alt = fp.instead;
@@ -446,7 +507,7 @@
             ${why.length ? `<div class="fits">✓ ${why.map(esc).join(' · ')}</div>` : ''}
             ${cons.length ? `<div class="cons">Watch: ${cons.map(esc).join(' · ')}</div>` : ''}
           </div>
-          <button class="act alt" data-act="take" data-arg="${esc(alt.player.key)}" title="Mark as drafted">${c.live ? 'Taken' : 'Drafted'}</button>
+          <div class="btncol">${espnBtn(alt.player, c, true)}<button class="${api.espnAction ? 'sm' : 'act alt'}" data-act="take" data-arg="${esc(alt.player.key)}" title="Mark as drafted (someone took him)">${c.live ? 'Taken' : 'Drafted'}</button></div>
         </div>`;
       }
       html += '<div class="sec">Next on your board</div><ol class="list">';
@@ -457,6 +518,7 @@
           <div class="sub">${meta(s.player)} ${stats(s.player)}</div>
           ${fitChips(fitByKey.get(s.player.key))}
           ${s.notes.length ? `<div class="mini">${s.notes.filter((n) => n.kind !== 'inj' && n.kind !== 'dr' && n.kind !== 'need' && n.kind !== 'warn' && n.kind !== 'status').map((n) => `<span class="n-${n.kind}">${esc(n.text)}</span>`).join('')}</div>` : ''}</div>
+          ${espnBtn(s.player, c)}
           <button class="sm" data-act="take" data-arg="${esc(s.player.key)}" title="Mark as drafted">✓</button>
           <button class="sm" data-act="toggleMine" data-arg="${esc(s.player.key)}" title="I drafted him">Me</button>
         </li>`;
@@ -466,6 +528,28 @@
         html += `<div class="sec">Probably still there at #${draft.myFollowingPick}</div><div class="chips">${sug.likelyAtNext.map((x) => `<span class="chip">${esc(x.player.name)} <i>${Math.round(x.pAvail * 100)}%</i></span>`).join('')}</div>`;
         html += '<div class="foot">Availability % comes from simulating the rest of the draft 2,000 times from the current board using ESPN ADP. It’s an estimate, not a guarantee, and it updates after every pick.</div>';
       }
+      return html;
+    }
+
+    function renderPlan(c) {
+      const { draft } = c;
+      if (draft.complete) return '<div class="empty">Draft complete.</div>';
+      if (!draft.mySlot) return '<div class="empty">Set your draft slot in My Team to see a plan.</div>';
+      const plan = getPlan(c);
+      if (!plan.rows.length) return '<div class="empty">No ESPN ADP yet, so availability can’t be simulated. The plan appears once ESPN data loads (open your draft room or Follow my ESPN draft).</div>';
+      let html = `<div class="foot" style="margin-top:0">Your picks: <b>${draft.myPickNumbers.join(', ')}</b>. For each pick, this is the best team fit from your list among players at least 50% likely to still be there, from 1,000 simulated drafts. It re-plans after every pick.</div>`;
+      html += '<ol class="list plan">';
+      for (const r of plan.rows) {
+        if (!r.player) { html += `<li class="prow"><span class="rk">#${r.pick}</span><div class="who muted">No one on your list projects to be there — best available by ESPN rank.</div></li>`; continue; }
+        const pct = r.chance == null ? null : Math.round(r.chance * 100);
+        html += `<li class="prow"><span class="rk">R${r.round}<br>#${r.pick}</span>
+          <div class="who"><div class="nm">${esc(r.player.name)} ${badges(r.player)}</div>
+          <div class="sub">${meta(r.player)} <span>your #${r.player.myRank || '–'}</span> ${pct == null ? '<span class="muted">no ADP (likely there)</span>' : `<span class="${pct >= 70 ? 'okc' : 'midc'}">${pct}% there</span>`}${r.overList ? '<span class="okc">team-fit pick</span>' : ''}</div>
+          ${fitChips(r.fit)}
+          ${r.alts.length ? `<div class="mini"><span class="muted">or</span> ${r.alts.map((a) => `<span>${esc(a.player.name)}${a.chance == null ? '' : ` (${Math.round(a.chance * 100)}%)`}</span>`).join('')}</div>` : ''}</div></li>`;
+      }
+      html += '</ol>';
+      html += `<div class="sec">Projected team</div>${teamStrip(plan.profile)}`;
       return html;
     }
 
@@ -510,6 +594,7 @@
               <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${stats(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
               ${showOdds && !p.drafted ? oddsRow(av.odds.get(p.key), av.targets) : ''}
               ${!p.drafted && sug ? fitChips(HDA.assessFit(p, sug.profile, sug.rosterFit, c.rosterSlots), ['bad', 'warn', 'good', 'info']) : ''}</div>
+              ${p.drafted ? '' : espnBtn(p, c)}
               <button class="sm" data-act="take" data-arg="${esc(p.key)}" title="${p.drafted ? 'Undo' : 'Mark as drafted'}">${p.drafted ? '↺' : '✓'}</button>
               <button class="sm ${p.mine ? 'on' : ''}" data-act="toggleMine" data-arg="${esc(p.key)}" title="Mine">Me</button>
             </li>`;
@@ -555,7 +640,7 @@
         <div class="poscount">${Object.entries(pc).map(([k, v]) => `<span><b>${v}</b> ${k}</span>`).join('')}</div>
         <div class="sec">Team balance</div>${teamStrip(sug.profile)}
         ${sug.profile.old.length ? `<div class="muted small">${sug.profile.cfg.oldAge}+: ${sug.profile.old.map((p) => `${esc(p.name)} (${p.age})`).join(', ')}</div>` : ''}
-        ${sug.profile.prone.length ? `<div class="muted small">Injury prone (*): ${sug.profile.prone.map((p) => esc(p.name)).join(', ')}</div>` : ''}
+        ${sug.profile.risky.length ? `<div class="muted small">Injury risk: ${sug.profile.risky.map((p) => `${esc(p.name)} (${esc(HDA.healthRisk(p, sug.profile.cfg.oldAge).reasons.join(', '))})`).join('; ')}</div>` : ''}
         <div class="sec">Roster (${draft.myPlayers.length}/${draft.rounds})${total ? ` · ${Math.round(total * 10) / 10} FP/G total` : ''}</div>`;
       if (!draft.myPlayers.length) html += '<div class="empty small">No picks yet.</div>';
       else {
@@ -682,6 +767,8 @@
         if (changed) { state.sources.ws = true; persistLocal(); render(); }
       },
       reportExtra: null,
+      espnAction: null, // set by the draft-room content script: (player, 'draft'|'queue') => {ok, message}
+      toast,
       setAges(ages, info) { state.ages = ages || {}; state.agesInfo = info || null; board = null; render(); },
       toggle() { actions.collapse(); },
     };
@@ -770,6 +857,18 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .ghostbtn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px}
 .ghostbtn.danger{color:var(--bad)}
 .muted{color:var(--muted)}
+.btncol{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.act.espn{background:#2b3442;color:var(--ink);border:1px solid var(--line)}
+.act.espn.onclock{background:var(--accent);color:#1a0d06;border-color:var(--accent)}
+.sm.espn{color:var(--ink)}
+.sm.espn.onclock{background:var(--accent);color:#1a0d06;border-color:var(--accent);font-weight:800}
+.armed{background:#ffd23f !important;color:#1a0d06 !important;border-color:#ffd23f !important;font-weight:900}
+.toast{position:fixed;bottom:18px;z-index:2147483647;max-width:340px;padding:10px 12px;border-radius:9px;font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+.toast.side-right{right:20px}.toast.side-left{left:20px}
+.toast.t-ok{background:#14302a;color:#3ecf8e;border:1px solid #3ecf8e}
+.toast.t-bad{background:#3a1c1a;color:#ff8f84;border:1px solid #ff6b61}
+.plan .rk{width:44px;font-size:11px;line-height:1.2}
+.okc{color:var(--good)}.midc{color:var(--warn)}
 .small{font-size:11.5px;margin-top:4px}
 .teamstrip{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:0 0 8px;font-size:11.5px}
 .teamstrip .tl{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;font-size:10.5px;margin-right:2px}
@@ -803,5 +902,5 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .odds .na{font-size:11px;color:var(--muted);font-style:italic}
 `;
 
-  Object.assign(HDA, { createApp, storage, defaultSettings });
+  Object.assign(HDA, { createApp, storage, defaultSettings, migrateSettings });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

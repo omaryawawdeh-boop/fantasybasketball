@@ -82,6 +82,13 @@
     const rank = (ranks.STANDARD && ranks.STANDARD.rank) || (ranks.PPR && ranks.PPR.rank) || null;
     const adp = p.ownership && p.ownership.averageDraftPosition > 0 ? Math.round(p.ownership.averageDraftPosition * 10) / 10 : null;
     const { line, source } = pickStatLine(p.stats, seasonId);
+    // Games played last season (ESPN stat 42 in last season's totals).
+    let gamesLastSeason = null;
+    const lastTotals = Array.isArray(p.stats) && p.stats.find((st) => st.statSourceId === 0 && st.statSplitTypeId === 0 && st.seasonId === seasonId - 1 && st.stats);
+    if (lastTotals && lastTotals.stats['42'] != null) {
+      const gp = Number(lastTotals.stats['42']);
+      if (gp >= 0 && gp <= 90) gamesLastSeason = Math.round(gp);
+    }
     return {
       espnId: p.id,
       name: p.fullName || [p.firstName, p.lastName].filter(Boolean).join(' '),
@@ -92,6 +99,7 @@
       injury: p.injuryStatus && p.injuryStatus !== 'ACTIVE' ? p.injuryStatus : null,
       statLine: line,
       statSource: source,
+      gamesLastSeason,
     };
   }
 

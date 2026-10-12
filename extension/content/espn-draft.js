@@ -79,6 +79,10 @@
   liveReady = true;
   for (const f of pending.splice(0)) handleFrame(f);
 
+  // "Draft"/"Queue" buttons in the panel click ESPN's own buttons for you.
+  app.espnAction = (player, kind) => HDA.espnDraftAction(document, player, kind);
+  app.render();
+
   app.reportExtra = () => ({
     liveFeed: { framesSeen: frames.length, picksParsed: livePickCount, lastFrames: frames.slice(-25) },
     pageScan: HDA.lastScanInfo,

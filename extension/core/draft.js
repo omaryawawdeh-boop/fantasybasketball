@@ -84,6 +84,7 @@
       adp: (e && e.adp) || (r && r.adp) || null,
       injury: e ? e.injury : null,
       age: (e && e.age != null ? e.age : null) ?? (r && r.dob && HDA.ageFromDob ? HDA.ageFromDob(r.dob) : null),
+      gamesLastSeason: e && e.gamesLastSeason != null ? e.gamesLastSeason : null,
       injuryProne: !!(r && r.injuryProne),
       dontReach: !!(r && r.dontReach),
       rookie: !!(r && r.rookie),
@@ -402,7 +403,26 @@
   // ---------- team fit: balance, age, health ----------
 
   const BUCKET_LABEL = { G: 'guard', F: 'forward', C: 'center' };
-  const DEFAULT_FIT = { shares: { G: 0.38, F: 0.38, C: 0.24 }, oldAge: 35, maxOld: 2, maxProne: 2 };
+  const DEFAULT_FIT = { shares: { G: 0.38, F: 0.38, C: 0.24 }, oldAge: 35, maxOld: 2, maxRisky: 3 };
+
+  /**
+   * Injury risk from what we actually know: your "*" flag, games played last
+   * season (ESPN), age, and ESPN's current status. Points -> low / med / high.
+   */
+  function healthRisk(p, oldAge = DEFAULT_FIT.oldAge) {
+    const reasons = [];
+    let pts = 0;
+    if (p.injuryProne) { pts += 2; reasons.push('injury prone (*)'); }
+    if (p.gamesLastSeason != null) {
+      if (p.gamesLastSeason < 45) { pts += 2; reasons.push(`${p.gamesLastSeason} games last season`); }
+      else if (p.gamesLastSeason < 60) { pts += 1; reasons.push(`${p.gamesLastSeason} games last season`); }
+    }
+    if (p.age != null && p.age >= oldAge) { pts += p.age >= oldAge + 3 ? 2 : 1; reasons.push(`age ${p.age}`); }
+    if (p.injury === 'OUT' || p.injury === 'INJURY_RESERVE') { pts += 3; reasons.push(`listed ${p.injury.replace(/_/g, ' ').toLowerCase()}`); }
+    else if (p.injury === 'SUSPENSION') { pts += 2; reasons.push('suspended'); }
+    else if (p.injury === 'DAY_TO_DAY' || p.injury === 'QUESTIONABLE') { pts += 1; reasons.push('day to day'); }
+    return { level: pts >= 3 ? 'high' : pts >= 2 ? 'med' : 'low', points: pts, reasons };
+  }
 
   /** How much a player counts as guard / forward / center (multi-position players split). */
   function bucketFractions(pos) {
@@ -436,8 +456,11 @@
     for (const p of myPlayers) { const f = bucketFractions(p.pos); for (const k in counts) counts[k] += f[k]; }
     const old = myPlayers.filter((p) => p.age != null && p.age >= cfg.oldAge);
     const prone = myPlayers.filter((p) => p.injuryProne);
+    const risky = myPlayers.filter((p) => healthRisk(p, cfg.oldAge).level !== 'low');
+    // 'maxProne' was the older setting (max * players); it maps to max risky players + 1.
+    cfg.maxRisky = fit.maxRisky != null ? fit.maxRisky : fit.maxProne != null ? fit.maxProne + 1 : DEFAULT_FIT.maxRisky;
     const picksLeft = Math.max(0, rounds - myPlayers.length);
-    return { counts, targets, old, prone, picksLeft, picksMade: myPlayers.length, cfg };
+    return { counts, targets, old, prone, risky, picksLeft, picksMade: myPlayers.length, cfg };
   }
 
   /**
@@ -485,14 +508,23 @@
         flags.push({ kind: 'info', short: `Age ${player.age}`, text: `Age ${player.age}` });
       }
     }
-    if (player.injuryProne) {
-      const n = profile.prone.length;
-      if (n > cfg.maxProne) { adj -= 15; flags.push({ kind: 'bad', short: 'Too many INJ*', text: `Injury prone (*): you already have ${n}` }); }
-      else if (n === cfg.maxProne) { adj -= 6; flags.push({ kind: 'warn', short: `${ordinal(n + 1)} INJ*`, text: `Injury prone (*): would be your ${ordinal(n + 1)}` }); }
+    const risk = healthRisk(player, cfg.oldAge);
+    if (risk.level !== 'low') {
+      const n = (profile.risky || []).length;
+      const why = risk.reasons.join(', ');
+      if (n >= cfg.maxRisky) {
+        adj -= 25;
+        flags.push({ kind: 'bad', short: `${risk.level === 'high' ? 'High' : 'Med'} risk: ${n} already`, text: `Injury risk (${why}): you already have ${n} risky players` });
+      } else if (risk.level === 'high') {
+        adj -= 10;
+        flags.push({ kind: 'warn', short: 'High injury risk', text: `High injury risk: ${why}` });
+      } else {
+        adj -= 4;
+        flags.push({ kind: 'warn', short: 'Injury risk', text: `Some injury risk: ${why}` });
+      }
     }
     if (player.injury === 'OUT' || player.injury === 'INJURY_RESERVE') { adj -= 15; flags.push({ kind: 'bad', short: 'OUT', text: `ESPN lists him ${player.injury.replace(/_/g, ' ').toLowerCase()}` }); }
     else if (player.injury === 'SUSPENSION') { adj -= 10; flags.push({ kind: 'bad', short: 'Suspended', text: 'Suspended' }); }
-    else if (player.injury === 'DAY_TO_DAY') { adj -= 2; flags.push({ kind: 'warn', short: 'DTD', text: 'Day to day' }); }
     return { adj, flags, bad: flags.some((f) => f.kind === 'bad') };
   }
 
@@ -514,6 +546,43 @@
     return { top, instead, scored };
   }
 
+  /**
+   * A round-by-round plan for all your remaining picks, starting from the
+   * current board. At each of your picks it takes the best TEAM fit among the
+   * players on your list who are at least 50% likely to still be there
+   * (simulated), then updates your projected roster before the next pick.
+   * It's a forecast, not a promise: re-run after every pick.
+   */
+  function draftPlan({ board, draft, rosterSlots = DEFAULT_ROSTER, fit = {}, odds, minAvail = 0.5, window = 12 }) {
+    if (!odds || !odds.targets.length) return { rows: [], profile: null };
+    const listAvail = board.players.filter((p) => p.onList && !draft.drafted.has(p.key));
+    const pool = listAvail.length ? listAvail : board.players.filter((p) => !draft.drafted.has(p.key));
+    const team = draft.myPlayers.slice();
+    const taken = new Set();
+    const rows = [];
+    // When you're on the clock right now, plan this pick too (everyone left is available).
+    const picks = draft.onClock ? [draft.currentPick, ...odds.targets] : odds.targets;
+    picks.forEach((pick, h) => {
+      const oddsIdx = draft.onClock ? h - 1 : h;
+      // null = no ESPN ADP, so the market isn't drafting him: treat as available, label it honestly.
+      const chance = (p) => (oddsIdx < 0 ? 1 : ((odds.odds.get(p.key) || [])[oddsIdx] ?? (p.adp ? 1 : null)));
+      const cands = pool.filter((p) => !taken.has(p.key) && (chance(p) == null || chance(p) >= minAvail));
+      if (!cands.length) { rows.push({ pick, player: null }); return; }
+      const profile = teamProfile({ myPlayers: team, rounds: draft.rounds, fit });
+      profile.myPos = team.map((p) => p.pos || []);
+      const rf = dedicatedSlotsFilled(rosterSlots, profile.myPos);
+      const fp = teamFitPick({ candidates: cands, profile, rosterFit: rf, rosterSlots, window });
+      const choice = fp.instead || fp.top;
+      taken.add(choice.player.key);
+      team.push(choice.player);
+      const alts = fp.scored.filter((x) => x.player.key !== choice.player.key && !x.fit.bad)
+        .sort((a, b) => b.score - a.score).slice(0, 2).map((x) => ({ player: x.player, chance: chance(x.player) }));
+      rows.push({ pick, round: Math.ceil(pick / draft.teams), player: choice.player, chance: chance(choice.player), fit: choice.fit, alts, overList: !!fp.instead });
+    });
+    const final = teamProfile({ myPlayers: team, rounds: draft.rounds, fit });
+    return { rows, profile: final };
+  }
+
   /** Group the user's list by tier, with draft status per player. */
   function tiers(board, draft) {
     const groups = new Map();
@@ -532,7 +601,7 @@
   Object.assign(HDA, {
     SLOT_ELIGIBILITY, DEFAULT_ROSTER, buildBoard, mergePicks, pickKey, ownerSlot, pickNumbersForSlot, computeDraft,
     dedicatedSlotsFilled, normalCdf, probGoneBefore, availabilityOdds, suggest, tiers,
-    bucketFractions, balanceTargets, teamProfile, assessFit, teamFitPick, DEFAULT_FIT,
+    bucketFractions, balanceTargets, teamProfile, assessFit, teamFitPick, DEFAULT_FIT, healthRisk, draftPlan,
   });
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
