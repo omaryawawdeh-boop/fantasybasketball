@@ -32,6 +32,13 @@ Your list order never changes, but the panel also checks every pick against your
 When your #1 available would hurt the team, the Suggestions tab shows a red **⚠ Avoid** box explaining why, plus a green **Draft instead** card with the best-fitting player from the next ~12 on your list. My Tiers shows chips like `Too many F`, `Need C`, `Age 41: 2 vets` on every available player. The thresholds are in ⚙ → *Team balance & health*.
 
 
+## Plan, injury risk, and drafting from the panel
+
+- **Plan tab:** a pick-by-pick plan for every remaining pick (your slot is #4: picks 4, 25, 32, 53, 60, 81, 88, 109, 116, 137, 144, 165, 172). At each pick it takes the best team fit from your list among players at least 50% likely to still be there (1,000 simulated drafts), shows 2 alternates, and ends with the projected team balance. It re-plans after every pick.
+- **Injury risk:** each player is low / medium / high from your `*`, games played last season (ESPN), age, and ESPN's current status. Your team has a cap on risky players (default 3, in ⚙).
+- **Draft / Queue buttons:** on the clock, **Draft** (tap twice) clicks ESPN's own DRAFT button for that player, using ESPN's player search if he isn't on screen. Otherwise **Queue** adds him to your ESPN queue, so autopick takes him if your clock runs out. If ESPN's page can't be matched, the name is left in ESPN's search box for you to click.
+
+## Before draft day: connect your league
 
 ⚙ → **My ESPN league** comes prefilled with your league (888634487). It's private, so log in at fantasy.espn.com in the same browser first.
 
@@ -45,6 +52,7 @@ When your #1 available would hurt the team, the Suggestions tab shows a red **�
 | Tab | What it does |
 | --- | --- |
 | **Suggestions** | Who to take now (your top available player), the DR call, your next 5, and who's probably still there at your next pick |
+| **Plan** | Your pick-by-pick plan for the rest of the draft (see above). |
 | **My Tiers** | Your full board by tier, with each available player's **chance of still being there at your next 3 picks**. It comes from 2,000 simulations of the rest of the draft from the current board, using ESPN ADP, and recalculates after every pick. with drafted players crossed off, your picks in blue, and a "left in tier" meter. Fully drafted tiers fold away. Type a name and press Enter to mark him drafted. |
 | **My Team** | Your roster, which starting slots are still empty, position counts, and projected FP/G in your scoring |
 | **Picks** | Every pick so far with team names. Undo and "Me" fix-ups. |
