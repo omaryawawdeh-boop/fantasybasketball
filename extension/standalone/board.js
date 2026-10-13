@@ -12,9 +12,10 @@
   const host = document.getElementById('app');
 
   if (!leagueId) {
-    bar.innerHTML = '<span><b>Manual board</b> — mark each pick with ✓ or type a name + Enter.</span>'
+    bar.innerHTML = (params.get('edit') ? '<span><b>Edit your rankings</b> — changes save instantly and show up in your draft room.</span>' : '<span><b>Manual board</b> — mark each pick with ✓ or type a name + Enter.</span>')
       + (settings.leagueId ? `<span><a href="?league=${settings.leagueId}">Follow ESPN league ${settings.leagueId}</a></span>` : '');
-    HDA.createApp({ host, mode: 'standalone', draftId: 'standalone' });
+    const app = await HDA.createApp({ host, mode: 'standalone', draftId: 'standalone' });
+    if (params.get('edit')) app.startEdit();
     return;
   }
   bar.innerHTML = `<span>Following <b>ESPN league ${leagueId}</b> live (read-only, uses your ESPN login).</span><span><a href="?manual=1">Switch to manual board</a></span>`;

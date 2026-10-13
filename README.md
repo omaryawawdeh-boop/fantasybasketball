@@ -6,7 +6,7 @@ Your own fantasy basketball tier list, live inside the ESPN draft room. It works
 
 - **Your order is law.** The top suggestion is always the highest-ranked player on *your* board who's still available. Nothing reorders your list.
 - **Syncs with ESPN automatically.** Works in mock and real drafts. It reads picks, teams, draft order, roster slots and scoring from ESPN's own draft-room requests (with your existing ESPN login) every ~3 seconds. Drafted players get crossed off and your picks go to My Team.
-- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 11* has 169 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
+- **Your spreadsheet is built in.** *Fantasy Basketball Ranking 14* has 178 players across 12 tiers. `*` = injury prone, `DR` = don't reach (the market drafts him later, but you like him there). Tiers and notes come from your tier sheet.
 - **Context, not overrides.** Each player shows notes for the last player left in a tier, the chance he's gone before your next pick (from ESPN ADP), open-slot needs, and ESPN injury status. DR players get a badge and a plain note ("you like him here; market ADP 40"). DR never changes the order or suggests someone else.
 
 ## Install (2 minutes, Chrome / Edge / Brave)
@@ -64,6 +64,19 @@ The header shows the sync state, and the panel falls back in this order:
 1. **ESPN API** (green): exact picks.
 2. **Reading the page** (yellow): if ESPN won't serve the league data (some mock rooms, outages), it reads drafted names from the page's pick and roster widgets. This is best effort, because ESPN can change its page.
 3. **Manual**: ✓ marks a player drafted, **Me** marks him yours, and Enter in the search box marks the first match. The popup also opens a full-page **manual draft board** for Yahoo, Sleeper or in-person drafts.
+
+## Editing your rankings (pre-draft and mid-draft)
+
+In the panel, open **My Tiers → ✎ Edit list**, or click the toolbar icon → **Edit my rankings** to edit before the draft. Changes save instantly and update suggestions, odds and the plan right away:
+
+- **Drag** a row (⠇) to a new spot, or onto a tier header to make him the first player of that tier.
+- **Type a rank:** click a player's rank number, type the new rank, and press Enter.
+- **▲ / ▼** move one spot. **T↑ / T↓** move to the tier above or below. **✂** starts a new tier at that player. A tier header's **merge ↑** joins it with the tier above, and **✎** renames it.
+- **DR / INJ\*** toggles the flags. **✕** removes a player.
+- **Add a player:** search his name. Players not on your list get **+ Next** (becomes your next suggestion) and **+ End**.
+- **↶ Undo** goes back step by step. **Restore spreadsheet** returns to the built-in board.
+
+Mid-draft, tick **Hide drafted** first so only live players are on screen.
 
 ## Changing your rankings
 

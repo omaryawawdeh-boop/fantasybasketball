@@ -176,6 +176,41 @@
       return { board: b, draft, sug, rosterSlots, live, teams, rounds, avail };
     }
 
+    // ---------- list editing ----------
+    const undoStack = [];
+    const RP = () => state.rankings.players;
+    const RL = () => state.rankings.tierLabels || {};
+    function saveRankings(next, isUndo) {
+      if (next.source === 'default') {
+        // Undo all the way back to the built-in board.
+        state.rankings = next;
+        storage.set('hda:rankings', null);
+      } else {
+        const base = state.rankings.source === 'default'
+          ? HDA.DEFAULT_RANKINGS_VERSION || 'built-in board'
+          : state.rankings.basedOn || state.rankings.sourceName || 'imported list';
+        state.rankings = {
+          players: next.players,
+          tierLabels: next.tierLabels || {},
+          source: 'edited',
+          sourceName: next.source === 'edited' && next.sourceName ? next.sourceName : `${base} (edited)`,
+          basedOn: next.basedOn || base,
+          importedAt: Date.now(),
+        };
+        storage.set('hda:rankings', state.rankings);
+      }
+      board = null;
+      if (isUndo) toast('Undone');
+      render();
+    }
+    function applyEdit(next, msg) {
+      if (next.players === state.rankings.players && next.tierLabels === state.rankings.tierLabels) return; // no-op
+      undoStack.push(state.rankings);
+      if (undoStack.length > 50) undoStack.shift();
+      saveRankings(next);
+      if (msg) toast(msg);
+    }
+
     // ---------- actions ----------
     const actions = {
       tab(t) { state.ui.tab = t; resetScroll = true; persistUi(); render(); },
@@ -241,6 +276,46 @@
         else location.href = '../options/options.html';
       },
       retry() { if (api.onRetry) api.onRetry(); },
+      // ----- editing your list (My Tiers -> Edit) -----
+      editToggle() { state.ui.edit = !state.ui.edit; state.ui.rankEditing = null; if (state.ui.edit) state.ui.tab = 'tiers'; render(); },
+      edMove(arg) { const [r, d] = arg.split('|').map(Number); applyEdit(HDA.rankEdit.moveBy(RP(), RL(), r, d)); },
+      edTier(arg) { const [r, d] = arg.split('|').map(Number); applyEdit(HDA.rankEdit.changeTier(RP(), RL(), r, d)); },
+      edSplit(arg) { applyEdit(HDA.rankEdit.splitTier(RP(), RL(), Number(arg))); },
+      edMerge(arg) { applyEdit(HDA.rankEdit.mergeTier(RP(), RL(), Number(arg))); },
+      edFlag(arg) { const [r, f] = arg.split('|'); applyEdit(HDA.rankEdit.toggleFlag(RP(), RL(), Number(r), f)); },
+      edRemove(arg) { applyEdit(HDA.rankEdit.removeAt(RP(), RL(), Number(arg)), 'Removed from your list'); },
+      edRankStart(arg) { state.ui.rankEditing = Number(arg); render(); const i = rootEl.querySelector('[data-rankinput]'); if (i) { i.focus(); i.select(); } },
+      edRename(arg) {
+        const t = Number(arg);
+        const name = window.prompt(`Name for Tier ${t} (blank to clear):`, RL()[t] || '');
+        if (name != null) applyEdit(HDA.rankEdit.renameTier(RP(), RL(), t, name));
+      },
+      edAdd(arg) {
+        // arg = "key|next" (right above your best available) or "key|end"
+        const [key, where] = arg.split('|');
+        const p = getBoard().byKey.get(key);
+        if (!p) return;
+        let rank = null;
+        if (where === 'next') {
+          const c = compute();
+          const top = c.board.players.find((x) => x.onList && !c.draft.drafted.has(x.key));
+          rank = top ? top.myRank : null;
+        }
+        applyEdit(HDA.rankEdit.insertAt(RP(), RL(), { name: p.name, team: p.team, pos: p.pos }, rank), `Added ${p.name} ${where === 'next' ? 'as your next pick' : 'at the bottom'}`);
+      },
+      edUndo() {
+        const prev = undoStack.pop();
+        if (!prev) { toast('Nothing to undo', 'bad'); return; }
+        saveRankings(prev, true);
+      },
+      async edReset() {
+        if (!confirm(`Throw away your edits and go back to your spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
+        undoStack.push(state.rankings);
+        await storage.set('hda:rankings', null);
+        state.rankings = await loadRankings();
+        board = null;
+        render();
+      },
       /** Draft (on the clock) or queue (otherwise) on ESPN itself. Drafting needs a second tap. */
       async espn(key, el) {
         const c = compute();
@@ -309,8 +384,50 @@
         else renderBody(true);
       }
     });
+    let dragRank = null;
+    rootEl.addEventListener('dragstart', (ev) => {
+      const li = ev.target.closest && ev.target.closest('[data-rank]');
+      if (!li || !state.ui.edit) return;
+      dragRank = Number(li.dataset.rank);
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', String(dragRank));
+      li.classList.add('dragging');
+    });
+    rootEl.addEventListener('dragover', (ev) => {
+      if (dragRank == null) return;
+      const t = ev.target.closest && ev.target.closest('[data-rank],[data-droptier]');
+      if (!t) return;
+      ev.preventDefault();
+      for (const el of rootEl.querySelectorAll('.dropto')) if (el !== t) el.classList.remove('dropto');
+      t.classList.add('dropto');
+    });
+    rootEl.addEventListener('drop', (ev) => {
+      if (dragRank == null) return;
+      const t = ev.target.closest && ev.target.closest('[data-rank],[data-droptier]');
+      const from = dragRank;
+      dragRank = null;
+      if (!t) return;
+      ev.preventDefault();
+      if (t.dataset.rank) applyEdit(HDA.rankEdit.moveTo(RP(), RL(), from, Number(t.dataset.rank)));
+      else applyEdit(HDA.rankEdit.moveToTierStart(RP(), RL(), from, Number(t.dataset.droptier)));
+    });
+    rootEl.addEventListener('dragend', () => {
+      dragRank = null;
+      for (const el of rootEl.querySelectorAll('.dropto,.dragging')) el.classList.remove('dropto', 'dragging');
+    });
+
     rootEl.addEventListener('keydown', (ev) => {
       ev.stopPropagation(); // keep ESPN hotkeys from firing while typing in the panel
+      if (ev.target.dataset.rankinput != null) {
+        if (ev.key === 'Enter') {
+          const from = Number(ev.target.dataset.rankinput);
+          const to = Number(ev.target.value);
+          state.ui.rankEditing = null;
+          if (to > 0) applyEdit(HDA.rankEdit.moveTo(RP(), RL(), from, to), `Moved to #${Math.min(to, RP().length)}`);
+          else render();
+        } else if (ev.key === 'Escape') { state.ui.rankEditing = null; render(); }
+        return;
+      }
       if (ev.key === 'Enter' && ev.target.dataset.search != null) {
         const first = rootEl.querySelector('[data-first-hit]');
         if (first) { actions.take(first.dataset.firstHit); ev.target.select(); }
@@ -557,6 +674,21 @@
       return `<div class="search"><input data-search placeholder="Find player — Enter marks first match drafted" value="${esc(state.ui.search)}"></div>`;
     }
 
+    function editRow(p) {
+      const r = p.myRank;
+      const rk = state.ui.rankEditing === r
+        ? `<input class="rkin" data-rankinput="${r}" value="${r}" inputmode="numeric" title="Type a new rank, then Enter">`
+        : `<button class="rkbtn" data-act="edRankStart" data-arg="${r}" title="Click to type a new rank">${r}</button>`;
+      return `<li class="prow edit ${p.drafted ? 'gone' : ''} ${p.mine ? 'mine' : ''}" draggable="true" data-rank="${r}">
+        <span class="grip" title="Drag to move">\u2807</span>${rk}
+        <div class="who"><div class="nm">${esc(p.name)}</div><div class="sub">${meta(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
+          <div class="edflags"><button class="flagbtn ${p.dontReach ? 'on dr' : ''}" data-act="edFlag" data-arg="${r}|dontReach" title="Toggle Don't Reach">DR</button><button class="flagbtn ${p.injuryProne ? 'on inj' : ''}" data-act="edFlag" data-arg="${r}|injuryProne" title="Toggle injury prone">INJ*</button></div></div>
+        <div class="edbtns">
+          <button class="sm" data-act="edMove" data-arg="${r}|-1" title="Up one">\u25b2</button><button class="sm" data-act="edTier" data-arg="${r}|-1" title="Move to the tier above">T\u2191</button><button class="sm" data-act="edSplit" data-arg="${r}" title="Start a new tier at this player">\u2702</button>
+          <button class="sm" data-act="edMove" data-arg="${r}|1" title="Down one">\u25bc</button><button class="sm" data-act="edTier" data-arg="${r}|1" title="Move to the tier below">T\u2193</button><button class="sm del" data-act="edRemove" data-arg="${r}" title="Remove from your list">\u2715</button>
+        </div></li>`;
+    }
+
     function renderTiers(c) {
       const q = HDA.normalizeName(state.ui.search);
       const groups = HDA.tiers(c.board, c.draft);
@@ -565,8 +697,18 @@
       const av = c.avail;
       const sug = c.draft.complete ? null : c.sug;
       const showOdds = av && av.targets.length && av.sims;
-      let html = `${renderSearch()}<div class="tools"><label><input type="checkbox" ${state.ui.hideDrafted ? 'checked' : ''} data-act="hideDrafted"> Hide drafted</label></div>`;
-      if (showOdds) {
+      const edit = !!state.ui.edit;
+      let html = `${renderSearch()}<div class="tools"><label><input type="checkbox" ${state.ui.hideDrafted ? 'checked' : ''} data-act="hideDrafted"> Hide drafted</label>
+        <button class="ghostbtn ${edit ? 'editon' : ''}" data-act="editToggle">${edit ? '\u2713 Done editing' : '\u270e Edit list'}</button></div>`;
+      if (edit) {
+        const stale = state.rankings.source === 'edited' && /^Ranking /.test(state.rankings.basedOn || '') && HDA.DEFAULT_RANKINGS_VERSION && state.rankings.basedOn !== HDA.DEFAULT_RANKINGS_VERSION;
+        html += `<div class="editbar">
+          <div><b>Editing your list</b> \u00b7 saves instantly \u00b7 drag \u2807 a row, click a rank number to type a new one, \u25b2\u25bc to nudge, T\u2191/T\u2193 to change tiers, \u2702 to start a new tier.</div>
+          <div class="btnrow"><button class="ghostbtn" data-act="edUndo">\u21b6 Undo</button><button class="ghostbtn" data-act="edReset">Restore spreadsheet (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})</button></div>
+          ${stale ? `<div class="warnbox" style="margin:6px 0 0">Your edits are based on ${esc(state.rankings.basedOn)}; a newer board (${esc(HDA.DEFAULT_RANKINGS_VERSION)}) is built in. Use \u201cRestore spreadsheet\u201d to switch.</div>` : ''}
+        </div>`;
+      }
+      if (showOdds && !edit) {
         html += `<div class="oddshead" title="Chance he's still on the board at each of your next turns, from ${av.sims.toLocaleString()} simulations of the rest of the draft using ESPN ADP. Recalculated after every pick.">
           <span>Still there at your pick</span>${av.targets.map((t, i) => `<b>${['Next', '2nd', '3rd'][i]} \u00b7 #${t}</b>`).join('')}</div>`;
       }
@@ -579,15 +721,16 @@
         // Fully drafted tiers fold away unless you open them (searching opens everything).
         const open = q ? true : state.ui.openTiers[g.tier] != null ? state.ui.openTiers[g.tier] : g.left > 0;
         const pct = Math.round((g.left / g.players.length) * 100);
-        html += `<section class="tier ${g.left === 0 ? 'empty-tier' : ''}">
-          <div class="th" data-act="toggleTier" data-arg="${g.tier}">
-            <span class="tn">T${g.tier}</span><span class="tl">${esc(labels[g.tier] || '')}</span>
+        html += `<section class="tier ${g.left === 0 && !edit ? 'empty-tier' : ''}">
+          <div class="th" data-act="toggleTier" data-arg="${g.tier}" ${edit ? `data-droptier="${g.tier}"` : ''}>
+            <span class="tn">T${g.tier}</span><span class="tl">${esc(labels[g.tier] || '')}${edit ? ` <button class="mini-btn" data-act="edRename" data-arg="${g.tier}" title="Rename tier">\u270e</button>${g.tier > 1 ? ` <button class="mini-btn" data-act="edMerge" data-arg="${g.tier}" title="Merge into the tier above">merge \u2191</button>` : ''}` : ''}</span>
             <span class="tleft ${g.left <= 2 && g.left > 0 ? 'low' : ''}">${g.left}/${g.players.length} left</span>
             <span class="meter"><i style="width:${pct}%"></i></span>
           </div>`;
         if (open) {
           html += '<ol class="list">';
           for (const p of rows) {
+            if (edit) { html += editRow(p); continue; }
             if (!p.drafted && !firstHit && q) firstHit = p.key;
             html += `<li class="prow ${p.drafted ? 'gone' : ''} ${p.mine ? 'mine' : ''}" ${!p.drafted && firstHit === p.key ? `data-first-hit="${esc(p.key)}"` : ''}>
               <span class="rk">${p.myRank}</span>
@@ -603,18 +746,21 @@
         }
         html += '</section>';
       }
+      if (edit && !q) html += '<div class="foot">To add a player who isn\u2019t on your list, type his name in the search box above.</div>';
       if (q) {
-        // Off-list players (ESPN pool) so anyone can be marked.
+        // Off-list players (ESPN pool) so anyone can be marked or added.
         const extra = c.board.players.filter((p) => !p.onList && HDA.normalizeName(p.name).includes(q)).slice(0, 8);
         if (extra.length) {
-          html += '<div class="sec">Not on your list</div><ol class="list">';
+          html += '<div class="sec">Not on your list \u2014 add him</div><ol class="list">';
           for (const p of extra) {
             const d = c.draft.drafted.get(p.key);
             if (!d && !firstHit) firstHit = p.key;
             html += `<li class="prow ${d ? 'gone' : ''}" ${!d && firstHit === p.key ? `data-first-hit="${esc(p.key)}"` : ''}><span class="rk"></span>
               <div class="who"><div class="nm">${esc(p.name)} ${badges(p)}</div><div class="sub">${meta(p)} ${stats(p)}</div></div>
-              <button class="sm" data-act="take" data-arg="${esc(p.key)}">${d ? '↺' : '✓'}</button>
-              <button class="sm" data-act="toggleMine" data-arg="${esc(p.key)}">Me</button></li>`;
+              <button class="sm add" data-act="edAdd" data-arg="${esc(p.key)}|next" title="Add to your list right above your best available player">+ Next</button>
+              <button class="sm add" data-act="edAdd" data-arg="${esc(p.key)}|end" title="Add to the bottom of your list">+ End</button>
+              ${edit ? '' : `<button class="sm" data-act="take" data-arg="${esc(p.key)}">${d ? '↺' : '✓'}</button>
+              <button class="sm" data-act="toggleMine" data-arg="${esc(p.key)}">Me</button>`}</li>`;
           }
           html += '</ol>';
         }
@@ -771,6 +917,7 @@
       toast,
       setAges(ages, info) { state.ages = ages || {}; state.agesInfo = info || null; board = null; render(); },
       toggle() { actions.collapse(); },
+      startEdit() { state.ui.edit = true; state.ui.tab = 'tiers'; render(); },
     };
     render();
     return api;
@@ -857,6 +1004,25 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .ghostbtn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px}
 .ghostbtn.danger{color:var(--bad)}
 .muted{color:var(--muted)}
+.editbar{background:#1c2846;border:1px solid var(--mine);border-radius:8px;padding:8px 10px;font-size:12px;margin:6px 0;color:#c9d6ff}
+.editbar .btnrow{margin-top:6px;flex-wrap:wrap}
+.ghostbtn.editon{background:var(--mine);color:#0b1430;border-color:var(--mine);font-weight:800}
+.prow.edit{gap:6px;cursor:grab}
+.prow.edit.dragging{opacity:.4}
+.dropto{box-shadow:0 -3px 0 var(--accent) inset}
+.th.dropto{box-shadow:0 0 0 2px var(--accent) inset}
+.grip{color:var(--muted);font-size:14px;cursor:grab;flex:none}
+.rkbtn{background:var(--panel2);border:1px solid var(--line);border-radius:5px;color:var(--ink);font-size:12px;min-width:30px;padding:2px 4px;font-variant-numeric:tabular-nums;flex:none}
+.rkin{width:44px;background:#0b0e13;border:1px solid var(--accent);border-radius:5px;color:var(--ink);font:inherit;font-size:12px;padding:2px 4px;flex:none}
+.edflags{display:flex;gap:4px;margin-top:3px}
+.flagbtn{font-size:10px;font-weight:800;background:var(--panel2);border:1px dashed var(--line);border-radius:4px;color:var(--muted);padding:1px 5px}
+.flagbtn.on.dr{background:#2e2147;color:#c59bff;border-style:solid;border-color:#4a3470}
+.flagbtn.on.inj{background:#3a1c1a;color:#ff9f8f;border-style:solid;border-color:#6b2a24}
+.edbtns{display:grid;grid-template-columns:repeat(3,auto);gap:3px;flex:none}
+.edbtns .sm{padding:2px 5px;font-size:11px}
+.sm.del{color:var(--bad)}
+.sm.add{color:var(--good);border-color:#1f5a46}
+.mini-btn{font-size:10px;background:transparent;border:1px solid var(--line);border-radius:4px;color:var(--muted);padding:0 4px;margin-left:4px;text-transform:none;letter-spacing:0}
 .btncol{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .act.espn{background:#2b3442;color:var(--ink);border:1px solid var(--line)}
 .act.espn.onclock{background:var(--accent);color:#1a0d06;border-color:var(--accent)}

@@ -28,6 +28,7 @@ SPELLING = {
     'Cam Boozer': 'Cameron Boozer', 'AJ Dybansa': 'AJ Dybantsa', 'Daryn Peterson': 'Darryn Peterson',
     'VJ Edgecomb': 'VJ Edgecombe', 'AJ Mitchell': 'Ajay Mitchell', 'Ayo Donsumu': 'Ayo Dosunmu',
     'Jaime Jaquez': 'Jaime Jaquez Jr.',
+    'Domantis Sabonis': 'Domantas Sabonis', 'Isiah Collier': 'Isaiah Collier',
 }
 
 # Backup birth dates for veterans, used only when ESPN's athlete records can't be
@@ -39,7 +40,7 @@ DOB_FALLBACK = {
     'Kawhi Leonard': '1991-06-29', 'CJ McCollum': '1991-09-19', 'Kyrie Irving': '1992-03-23',
     'Rudy Gobert': '1992-06-26', 'Jonas Valanciunas': '1992-05-06', 'T.J. McConnell': '1992-03-25',
     'Tobias Harris': '1992-07-15', 'Andre Drummond': '1993-08-10', 'Clint Capela': '1994-05-18',
-    'Draymond Green': '1990-03-04',
+    'Draymond Green': '1990-03-04', 'Anthony Davis': '1993-03-11',
 }
 
 LEAGUE = {'espnLeagueId': 888634487, 'private': True, 'teams': 14, 'mySlot': 4, 'rounds': 13, 'format': 'H2H_POINTS',

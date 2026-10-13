@@ -29,6 +29,7 @@ const players = HDA.DEFAULT_RANKINGS.slice(0, 120).map((p, i) => ({
     stats: [{ seasonId: 2027, statSourceId: 1, statSplitTypeId: 0, averageStats: { 13: 8, 15: 4, 17: 2, 6: 7, 3: 5, 2: 1, 1: 1, 11: 2, 37: 0.3 } }],
   },
 }));
+players.push({ id: 9999, player: { id: 9999, fullName: 'Zed Offlist', proTeamId: 7, defaultPositionId: 5, eligibleSlots: [4, 11, 12], injuryStatus: 'ACTIVE', ownership: { averageDraftPosition: 150 }, draftRanksByRankType: { STANDARD: { rank: 150 } } } });
 const idOf = (name) => players.find((p) => p.player.fullName === name).id;
 
 let picks = [];
@@ -122,8 +123,11 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   others.forEach((n, i) => pick(6 + i, ((6 + i - 1) % 14) + 1, n));
   await page.waitForFunction(() => /Pick 24/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 15000 });
   const top2 = await panel.locator('.top-name').innerText();
-  // Next available on the list after those picks: #15 Josh Giddey (DR).
-  check('after 23 picks, top = next on my list (Josh Giddey, DR)', /Josh Giddey/.test(top2), top2);
+  // Expected: the first player on my (built-in) list who hasn't been picked.
+  const pickedNames = new Set(['Nikola Jokic', 'Shai Gilgeous-Alexander', 'Victor Wembanyama', 'Luka Doncic', 'Giannis Antetokounmpo', ...others]);
+  const remaining = HDA.DEFAULT_RANKINGS.filter((p) => !pickedNames.has(p.name));
+  const expectedTop = remaining[0];
+  check(`after 23 picks, top = next on my list (${expectedTop.name})`, top2.includes(expectedTop.name), top2);
   check('DR badge shown', /DR/.test(top2));
   const notes = await panel.locator('.top .notes').innerText();
   check('DR acknowledged as a note, no nudge box', /you like him here/.test(notes) && (await panel.locator('.drhint').count()) === 0, notes.split('\n').find((l) => /DR/.test(l)));
@@ -157,13 +161,74 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
 
   // Manual search + Enter marks first match drafted (ESPN lag case).
   await panel.locator('nav button', { hasText: 'My Tiers' }).click();
-  await panel.locator('[data-search]').fill('giddey');
+  await panel.locator('[data-search]').fill(expectedTop.name.split(' ').slice(-1)[0].toLowerCase());
   await panel.locator('[data-search]').press('Enter');
   await page.waitForTimeout(300);
   await panel.locator('[data-search]').fill('');
   await panel.locator('nav button', { hasText: 'Suggestions' }).click();
   const top3 = await panel.locator('.top-name').innerText();
-  check('manual mark via search+Enter removes Giddey from suggestions', /Tyrese Haliburton|Amen|Alperen|Cooper Flagg/.test(top3) && !/Giddey/.test(top3), top3);
+  check(`manual mark via search+Enter removes ${expectedTop.name}; next is ${remaining[1].name}`, top3.includes(remaining[1].name), top3);
+
+  // ---- Editing my list mid-draft ----
+  page.on('dialog', (d) => d.accept());
+  const topName = async () => panel.locator('.top-name').first().evaluate((el) => el.firstChild.textContent.trim());
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  const topBefore = await topName();
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  await panel.locator('[data-act="editToggle"]').click();
+  check('Edit list mode opens with edit bar', (await panel.locator('.editbar').count()) === 1);
+  // Type a new rank: move Cooper Flagg to #1.
+  const target = remaining[4].name; // still on the board, not my top
+  await panel.locator('[data-search]').fill(target.split(' ').slice(-1)[0].toLowerCase());
+  await panel.locator('.prow.edit .rkbtn').first().click();
+  await panel.locator('[data-rankinput]').fill('1');
+  await panel.locator('[data-rankinput]').press('Enter');
+  await panel.locator('[data-search]').fill('');
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check(`typing rank 1 makes ${target} my top suggestion`, (await topName()) === target, await topName());
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  await panel.locator('[data-act="edUndo"]').click();
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check('Undo restores the previous order', (await topName()) === topBefore, await topName());
+  // Drag and drop: drag Devin Booker onto the row of the current top available player.
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  await panel.locator('[data-act="hideDrafted"]').click(); // hide drafted rows: the live part of the list sits together
+  const avail = panel.locator('.prow.edit:not(.gone)');
+  const firstAvail = (await avail.first().locator('.nm').innerText()).trim();
+  const secondAvail = (await avail.nth(2).locator('.nm').innerText()).trim();
+  await avail.nth(2).dragTo(avail.first());
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check('drag-and-drop moves a player up the list', (await topName()) === secondAvail, `${firstAvail} -> ${await topName()} (dragged ${secondAvail})`);
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  await panel.locator('[data-act="hideDrafted"]').click();
+  // Flags and tier buttons.
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  const brow = panel.locator('.prow.edit', { hasText: 'Devin Booker' });
+  await brow.locator('[data-act="edFlag"]', { hasText: 'DR' }).click();
+  check('DR toggle adds the flag', await panel.locator('.prow.edit', { hasText: 'Devin Booker' }).locator('.flagbtn.on.dr').count() === 1);
+  const tierOf = (n) => panel.locator('.prow.edit', { hasText: n }).evaluate((el) => el.closest('.tier').querySelector('.tn').textContent);
+  const tierBefore = await tierOf('Devin Booker');
+  await panel.locator('.prow.edit', { hasText: 'Devin Booker' }).locator('[data-act="edTier"]', { hasText: 'T\u2193' }).click();
+  const tierAfter = await tierOf('Devin Booker');
+  check('T\u2193 moves him into the next tier', Number(tierAfter.slice(1)) === Number(tierBefore.slice(1)) + 1, `${tierBefore} -> ${tierAfter}`);
+  // Add an off-list player as my next pick.
+  await panel.locator('[data-search]').fill('offlist');
+  await panel.locator('[data-act="edAdd"]', { hasText: '+ Next' }).click();
+  await panel.locator('[data-search]').fill('');
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check('"+ Next" adds an off-list player as my next suggestion', (await topName()) === 'Zed Offlist', await topName());
+  // Edits survive a reload.
+  await page.reload();
+  await panel.locator('.sync.ok').waitFor({ timeout: 15000 });
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check('edits persist after reloading the draft room', (await topName()) === 'Zed Offlist', await topName());
+  // Restore the spreadsheet board.
+  await panel.locator('nav button', { hasText: 'My Tiers' }).click();
+  if (!(await panel.locator('.editbar').count())) await panel.locator('[data-act="editToggle"]').click();
+  await panel.locator('[data-act="edReset"]').click();
+  await panel.locator('[data-act="editToggle"]').click();
+  await panel.locator('nav button', { hasText: 'Suggestions' }).click();
+  check('Restore spreadsheet puts the original order back', (await topName()) === topBefore, await topName());
 
   // Collapse/expand hotkey.
   await page.keyboard.press('Alt+Shift+D');
@@ -183,7 +248,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await live.waitForTimeout(400);
   const qClicks = await live.evaluate(() => window.__clicks.slice());
   check('panel "Queue" clicks ESPN\'s QUEUE button for that player', qClicks.some((c) => /^QUEUE:/.test(c)), qClicks.join(', '));
-  liveSocket.send('SELECTED 1 1000 {AAAA-BBBB}');
+  liveSocket.send(`SELECTED 1 ${idOf('Nikola Jokic')} {AAAA-BBBB}`);
   await live.waitForFunction(() => /Pick 2\b/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.clock').innerText), null, { timeout: 5000 });
   check('live-feed pick crosses off Jokic within seconds', !/Nikola Jokic/.test(await lp.locator('.top-name').innerText()));
   await live.evaluate(() => window.addPick('V. Wembanyama'));
@@ -205,13 +270,14 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   check('ESPN search box cleared afterwards', qv === '', JSON.stringify(qv));
   await lp.locator('[data-search]').fill('');
   await lp.locator('nav button', { hasText: 'Suggestions' }).click();
-  check('page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3', /Shai Gilgeous-Alexander/.test(ltop), ltop);
+  const liveTop = HDA.DEFAULT_RANKINGS.find((p) => !['Nikola Jokic', 'Victor Wembanyama'].includes(p.name)).name;
+  check(`page-read pick ("V. Wembanyama") crosses him off; on the clock at pick 3 (top: ${liveTop})`, ltop.includes(liveTop), ltop);
   check('available-list rows (DRAFT buttons) and autopick banner are NOT crossed off', /Giannis Antetokounmpo/.test(await lp.locator('.body').innerText()));
   // Last-name-only pick cell ("Doncic" -> Luka) also counts; DRAFT-button rows still don't.
   await live.evaluate(() => window.addPick('Doncic PG'));
   await live.waitForFunction(() => !/Luka Doncic/.test(document.querySelector('#hoops-draft-assistant').shadowRoot.querySelector('.body').innerText), null, { timeout: 5000 }).catch(() => {});
   check('last-name-only pick cell crosses off Luka', !/Luka Doncic/.test(await lp.locator('.body').innerText()));
-  liveSocket.send('SELECTED 3 1002 {MINE}');
+  liveSocket.send(`SELECTED 3 ${idOf('Shai Gilgeous-Alexander')} {MINE}`);
   await lp.locator('nav button', { hasText: 'My Team' }).click();
   await live.waitForTimeout(500);
   check('my live pick lands on My Team', /Shai Gilgeous-Alexander/.test(await lp.locator('.body').innerText()));
@@ -229,7 +295,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   // Scrolling must survive background syncs and new picks.
   await lp.locator('.body').evaluate((el) => { el.scrollTop = 900; });
   const before = await lp.locator('.body').evaluate((el) => el.scrollTop);
-  liveSocket.send('SELECTED 4 1003 {X}');
+  liveSocket.send(`SELECTED 4 ${idOf('Cade Cunningham')} {X}`);
   await live.waitForTimeout(4500);
   const after = await lp.locator('.body').evaluate((el) => el.scrollTop);
   check('scroll position stays put through syncs and new picks', before > 500 && Math.abs(after - before) < 5, `${before} -> ${after}`);
@@ -249,7 +315,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await board.locator('#app .top-name').waitFor();
   check('standalone board suggests Jokic first', /Nikola Jokic/.test(await board.locator('#app .top-name').innerText()));
   await board.locator('#app .act').click();
-  check('marking a pick advances to Victor Wembanyama', /Victor Wembanyama/.test(await board.locator('#app .top-name').innerText()));
+  check(`marking a pick advances to ${HDA.DEFAULT_RANKINGS[1].name}`, (await board.locator('#app .top-name').innerText()).includes(HDA.DEFAULT_RANKINGS[1].name));
   await board.screenshot({ path: path.join(OUT, '5-standalone.png'), fullPage: false });
 
   // Team fit on the manual board: give me 6 forwards and 2 vets, then check the warnings.
@@ -286,7 +352,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   opts.on('pageerror', (e) => console.log('OPTIONS ERROR', e.message));
   await opts.goto(`chrome-extension://${extId}/options/options.html`);
   await opts.locator('#current').waitFor();
-  check('options shows 169-player board (Ranking 11)', /169/.test(await opts.locator('#current').innerText()));
+  check('options shows 178-player board (Ranking 14)', /178/.test(await opts.locator('#current').innerText()));
   await opts.locator('#importBox summary').click();
   await opts.locator('#paste').fill('Nikola Jokic\t\nVictor Wembanyama*\t\nJosh Giddey\tDR');
   await opts.locator('#preview').click();
@@ -308,7 +374,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   await follow.locator('#app .sync.ok').waitFor({ timeout: 15000 });
   await follow.locator('#app nav button', { hasText: 'Suggestions' }).click();
   const ftop = await follow.locator('#app .top-name').innerText();
-  check('follow board syncs league and shares marks with draft room', /Cooper Flagg/.test(ftop), ftop);
+  check('follow board syncs league and shares marks with draft room', ftop.includes(remaining[1].name), ftop);
   check('follow board knows I am on the clock', /ON THE CLOCK/.test(await follow.locator('#app .clock').innerText()));
   await follow.screenshot({ path: path.join(OUT, '7-follow-board.png') });
 

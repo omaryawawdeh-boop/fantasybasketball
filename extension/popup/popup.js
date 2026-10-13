@@ -7,6 +7,7 @@
     follow.textContent = `Follow my ESPN draft (league ${leagueId})`;
     follow.onclick = () => open(`standalone/board.html?league=${leagueId}`);
   } else follow.remove();
+  document.getElementById('edit').onclick = () => open('standalone/board.html?manual=1&edit=1');
   document.getElementById('board').onclick = () => open('standalone/board.html?manual=1');
   document.getElementById('opts').onclick = () => chrome.runtime.openOptionsPage();
 })();
