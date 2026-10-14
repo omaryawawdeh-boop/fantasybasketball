@@ -40,6 +40,21 @@
   </section>
 
   <section>
+    <h2>📱 Phone list</h2>
+    <p class="help">Your list also lives online at the link below, so you can edit it on your phone (add it to your home screen). When you open the draft room or the board, the extension quietly opens that page in a background tab for a few seconds and syncs: <b>whichever side changed last wins</b>. You need to be signed in to claude.ai in this Chrome.</p>
+    <div class="row">
+      <label>Link <input id="phoneUrl" type="url" style="width:360px"></label>
+      <button id="phoneOpen" class="btn primary">Open &amp; sync now</button>
+    </div>
+    <label class="inline"><input type="checkbox" id="autoPhone"> Sync automatically (at most every 15 minutes)</label>
+    <div class="row">
+      <button id="copyCode" class="btn">Copy list code for phone</button>
+      <span class="help" id="phoneLast"></span>
+    </div>
+    <p class="help">Backup plan if syncing ever fails: <b>Copy list code</b> here and paste it on the phone page (bottom), or copy the code on the phone and paste it into <b>Import</b> above.</p>
+  </section>
+
+  <section>
     <h2>My ESPN league</h2>
     <p class="help">Private leagues work as long as you're logged in to ESPN in this browser. Everything here is read-only. Run the test now, and again after ESPN sets the draft order, to see your pick.</p>
     <div class="row">

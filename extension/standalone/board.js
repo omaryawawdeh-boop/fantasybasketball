@@ -5,6 +5,8 @@
 // With no params it follows the league saved in Options, if any.
 (async function () {
   const params = new URLSearchParams(location.search);
+  // Pick up edits made on your phone (quietly; at most every 15 minutes).
+  HDA.phoneSync('auto');
   const settings = { ...HDA.defaultSettings(), ...(await HDA.storage.get('hda:settings', {})) };
   const leagueId = params.get('manual') ? null : Number(params.get('league')) || settings.leagueId || null;
   const seasonId = Number(params.get('season')) || HDA.defaultSeasonId();

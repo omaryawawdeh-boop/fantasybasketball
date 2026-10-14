@@ -111,4 +111,6 @@
   }
 
   HDA.startEspnSync({ app, leagueId: ctx.leagueId, seasonId, fetchJson, scanPage, fetchPublic });
+  // Pick up edits made on your phone (quietly; at most every 15 minutes).
+  HDA.phoneSync('auto');
 })();

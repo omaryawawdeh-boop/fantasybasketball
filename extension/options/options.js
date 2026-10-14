@@ -32,6 +32,17 @@
 
   function preview() {
     const text = $('paste').value;
+    const code = text.trim().match(/^HOOPSBOARD1:(.*)$/s);
+    if (code) {
+      let b = null;
+      try { b = JSON.parse(code[1]); } catch (e) { /* fall through */ }
+      const ok = b && Array.isArray(b.players) && b.players.length;
+      pending = ok ? { players: b.players.map((p, i) => ({ ...p, rank: i + 1 })), tierLabels: b.tierLabels || {}, source: 'edited', sourceName: 'Phone list', basedOn: 'Phone list', importedAt: Date.now() } : null;
+      $('save').disabled = !pending;
+      $('warnings').innerHTML = ok ? `<div class="ok">Phone list code: ${b.players.length} players. Save to use it.</div>` : '<div class="warn">That list code is incomplete. Copy it again.</div>';
+      $('previewOut').innerHTML = '';
+      return;
+    }
     const res = HDA.parseRankings(text);
     const hasTiers = new Set(res.players.map((p) => p.tier)).size > 1;
     let warnings = res.warnings.slice();
@@ -75,8 +86,8 @@
   };
   $('resetDefault').onclick = async () => {
     if (!confirm(`Replace your current board with the built-in board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
-    rankings = defaults();
-    await storage.set('hda:rankings', null); // no copy: always use the built-in board
+    rankings = HDA.builtInBoardAsList(); // saved as your list, so it syncs to the phone too
+    await storage.set('hda:rankings', rankings);
     renderCurrent();
   };
   $('export').onclick = () => {
@@ -215,6 +226,34 @@
   }
   $('fitReset').onclick = () => { delete settings.fit; saveSettings(); renderFit(); };
   renderFit();
+
+  // ----- phone list -----
+  const defaultPhoneUrl = (HDA.DEFAULT_LEAGUE && HDA.DEFAULT_LEAGUE.phoneListUrl) || '';
+  $('phoneUrl').value = settings.phoneListUrl || defaultPhoneUrl;
+  $('phoneUrl').onchange = (e) => { const v = e.target.value.trim(); settings.phoneListUrl = v && v !== defaultPhoneUrl ? v : undefined; saveSettings(); };
+  $('autoPhone').checked = settings.autoPhoneSync !== false;
+  $('autoPhone').onchange = (e) => { settings.autoPhoneSync = e.target.checked; saveSettings(); };
+  $('phoneOpen').onclick = () => HDA.phoneSync('open');
+  $('copyCode').onclick = async () => {
+    const players = rankings.players.map((p) => {
+      const o = { name: p.name, tier: p.tier, team: p.team || null, pos: p.pos || [] };
+      for (const k of ['dontReach', 'injuryProne', 'rookie']) if (p[k]) o[k] = true;
+      if (p.note) o.note = p.note;
+      return o;
+    });
+    await navigator.clipboard.writeText('HOOPSBOARD1:' + JSON.stringify({ players, tierLabels: rankings.tierLabels || {}, updatedAt: rankings.importedAt || Date.now() }));
+    $('copyCode').textContent = 'Copied!';
+    setTimeout(() => { $('copyCode').textContent = 'Copy list code for phone'; }, 1500);
+  };
+  async function renderPhoneLast() {
+    const last = await storage.get('hda:phoneSync', null);
+    $('phoneLast').textContent = last && last.at ? `Last sync: ${new Date(last.at).toLocaleString()} (${last.direction}).` : 'Not synced yet.';
+  }
+  renderPhoneLast();
+  if (chrome.storage && chrome.storage.onChanged) chrome.storage.onChanged.addListener(async (ch) => {
+    if (ch['hda:phoneSync']) renderPhoneLast();
+    if (ch['hda:rankings']) { rankings = await HDA.loadRankings(); if (rankings.source === 'default') rankings = defaults(); renderCurrent(); }
+  });
 
   renderCurrent();
   renderWeights();

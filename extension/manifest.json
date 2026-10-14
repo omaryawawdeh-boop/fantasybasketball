@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hoops Draft Assistant",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Your own tier list, live inside the ESPN fantasy basketball draft room. Crosses off drafted players and tells you who's next on YOUR board.",
   "permissions": [
     "storage"
@@ -47,6 +47,19 @@
         "content/espn-draft.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://*.claude.ai/*",
+        "https://*.claudeusercontent.com/*"
+      ],
+      "js": [
+        "content/phone-bridge.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_origin_as_fallback": true
     }
   ],
   "action": {

@@ -48,12 +48,46 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
 
 (async () => {
   const userDataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'hda-e2e-'));
+  // Fake "Hoops Board" phone page (the real one is a claude.ai artifact with an online db),
+  // served over HTTPS on a *.claudeusercontent.com name so the bridge content script runs.
+  // A real server (not page routing) because the extension opens its own background tabs.
+  const certDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'hda-cert-'));
+  require('child_process').execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=sync.test.claudeusercontent.com',
+    '-keyout', path.join(certDir, 'k.pem'), '-out', path.join(certDir, 'c.pem')], { stdio: 'ignore' });
+  const phone = { board: null, pushes: [], stats: null };
+  const phoneSrv = require('https').createServer({ key: fs.readFileSync(path.join(certDir, 'k.pem')), cert: fs.readFileSync(path.join(certDir, 'c.pem')) }, (req, res) => {
+    let body = '';
+    req.on('data', (d) => { body += d; });
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/save') { phone.board = JSON.parse(body); phone.pushes.push(phone.board); return res.end('ok'); }
+      if (req.method === 'POST' && req.url === '/stats') { phone.stats = JSON.parse(body); return res.end('ok'); }
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<!doctype html><html><head><meta name="hoops-draft-sync" content="1"></head><body>fake phone list<script>
+        let board = ${JSON.stringify(phone.board)};
+        const post = (u, b) => fetch(u, { method: 'POST', body: JSON.stringify(b) });
+        addEventListener('message', async (e) => {
+          const m = e.data;
+          if (!m || !m.__hdaSync) return;
+          if (m.__hdaSync === 'hello') postMessage({ __hdaSync: 'board', board, loaded: true, canWrite: true }, '*');
+          if (m.__hdaSync === 'push' && (!board || m.board.updatedAt > board.updatedAt)) { board = m.board; await post('/save', board); }
+          if (m.__hdaSync === 'stats') await post('/stats', m.stats);
+        });
+      </script></body></html>`);
+    });
+  });
+  await new Promise((r) => phoneSrv.listen(0, '127.0.0.1', r));
+  const phoneUrl = `https://sync.test.claudeusercontent.com:${phoneSrv.address().port}/board`;
   const ctx = await chromium.launchPersistentContext(userDataDir, {
     headless: true,
     channel: 'chromium', // full Chromium (new headless) — the headless shell can't load extensions
-    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
+    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--host-resolver-rules=MAP sync.test.claudeusercontent.com 127.0.0.1',
+      '--no-proxy-server', '--ignore-certificate-errors'],
+    ignoreHTTPSErrors: true,
     viewport: { width: 1400, height: 900 },
   });
+  // Point the extension at the fake phone page; auto sync stays off until the phone checks.
+  const sw0 = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+  await sw0.evaluate((url) => chrome.storage.local.set({ 'hda:settings': { phoneListUrl: url, autoPhoneSync: false } }), phoneUrl);
   await ctx.route('https://lm-api-reads.fantasy.espn.com/**', (route) => {
     const url = route.request().url();
     const headers = { 'content-type': 'application/json', 'access-control-allow-origin': 'https://fantasy.espn.com', 'access-control-allow-credentials': 'true', 'access-control-allow-headers': 'x-fantasy-filter' };
@@ -104,6 +138,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
 
   pick(1, 1, 'Nikola Jokic'); pick(2, 2, 'Shai Gilgeous-Alexander'); pick(3, 3, 'Victor Wembanyama'); pick(4, 4, 'Luka Doncic');
   const page = await ctx.newPage();
+  globalThis.__failShot = () => page.screenshot({ path: path.join(OUT, 'failure.png') }).catch(() => {});
   page.on('pageerror', (e) => console.log('PAGE ERROR', e.message));
   await page.goto('https://fantasy.espn.com/basketball/draft?leagueId=4242&seasonId=2027&teamId=5');
   const panel = page.locator('#hoops-draft-assistant');
@@ -408,8 +443,62 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   ed.on('dialog', (d) => d.accept());
   await ea.locator('[data-act="edReset"]').click();
 
+  // ---- Phone list sync ----
+  const local = () => sw.evaluate(() => chrome.storage.local.get(['hda:rankings', 'hda:phoneSync', 'hda:espnStats']));
+  check('phone list link is built in', /^https:\/\/claude\.ai\/artifact\//.test(HDA.DEFAULT_LEAGUE.phoneListUrl || ''), HDA.DEFAULT_LEAGUE.phoneListUrl);
+  // 1) Phone has a newer list -> the extension takes it.
+  const cur = (await local())['hda:rankings'];
+  const moved = cur.players.slice();
+  const [tenth] = moved.splice(9, 1);
+  moved.unshift({ ...tenth, tier: 1 });
+  phone.board = { players: moved.map(({ rank, ...p }) => p), tierLabels: cur.tierLabels, updatedAt: Date.now() + 1000 };
+  const ph = await ctx.newPage();
+  await ph.goto(phoneUrl);
+  await ed.waitForTimeout(2500);
+  let st = await local();
+  check('phone → computer: a newer phone list replaces the extension list', st['hda:rankings'].players[0].name === tenth.name && st['hda:rankings'].sourceName === 'Phone list', st['hda:rankings'].players[0].name);
+  check('phone → computer: open panels update right away', (await ea.locator('.prow .nm').first().innerText()).includes(tenth.name));
+  check('ESPN numbers are sent to the phone page', !!(phone.stats && Object.keys(phone.stats.byName || {}).length > 50), phone.stats ? Object.keys(phone.stats.byName).length : 'none');
+  // 2) Edit on the computer while the phone page is open -> pushed up.
+  await ea.locator('.prow.edit').first().locator('[data-act="edMove"]').last().click();
+  await ed.waitForTimeout(1500);
+  check('computer → phone: an edit in the extension is pushed to the phone list', phone.board.players[1].name === tenth.name && phone.pushes.length >= 1, phone.board.players.slice(0, 2).map((p) => p.name).join(', '));
+  await ph.close();
+  // 3) Next time the page opens, nothing changes (already in sync).
+  const n = phone.pushes.length;
+  const ph2 = await ctx.newPage();
+  await ph2.goto(phoneUrl);
+  await ed.waitForTimeout(2000);
+  st = await local();
+  check('reopening: already in sync, nothing overwritten', phone.pushes.length === n && st['hda:rankings'].players[1].name === tenth.name && st['hda:phoneSync'].direction === 'already in sync', st['hda:phoneSync'].direction);
+  await ph2.close();
+  // 4) Auto sync opens a background tab and closes it again.
+  await sw.evaluate(async () => {
+    const s = (await chrome.storage.local.get('hda:settings'))['hda:settings'];
+    await chrome.storage.local.set({ 'hda:settings': { ...s, autoPhoneSync: true } });
+    await chrome.storage.local.remove('hda:phoneSync');
+  });
+  const tabsBefore = ctx.pages().length;
+  const res = await ed.evaluate(() => chrome.runtime.sendMessage({ type: 'hda-phone-sync', mode: 'auto' }));
+  await ed.waitForTimeout(1000);
+  const opened = ctx.pages().length;
+  await ed.waitForTimeout(6000);
+  check('auto sync opens the phone page in the background, then closes it', res.ok && opened === tabsBefore + 1 && ctx.pages().length === tabsBefore, `${tabsBefore} -> ${opened} -> ${ctx.pages().length}`);
+  const again = await ed.evaluate(() => chrome.runtime.sendMessage({ type: 'hda-phone-sync', mode: 'auto' }));
+  check('auto sync doesn\'t run again within 15 minutes', !again.ok && /recently/.test(again.skipped || ''), JSON.stringify(again));
+  // 5) Chrome sync backup, restored if the local copy is lost.
+  await ed.waitForTimeout(3500);
+  const bk = await sw.evaluate(() => chrome.storage.sync.get(null));
+  check('rankings are backed up to Chrome sync storage', bk['hda:bk:n'] >= 1 && Object.entries(bk).every(([k, v]) => k.length + JSON.stringify(v).length < 8192), `${bk['hda:bk:n']} chunks`);
+  await sw.evaluate(() => chrome.storage.local.remove('hda:rankings'));
+  // (Restore runs on browser start / reinstall; call the same code path directly.)
+  const restored = await sw.evaluate(async () => { await restoreRankingsIfMissing(); return (await chrome.storage.local.get('hda:rankings'))['hda:rankings']; });
+  check('backup restores the list (order, tiers, flags) when the local copy is gone', restored && restored.players.length === st['hda:rankings'].players.length && restored.players[1].name === tenth.name
+    && restored.players.filter((p) => p.dontReach).length === st['hda:rankings'].players.filter((p) => p.dontReach).length, restored && restored.players.length);
+
   await ctx.close();
+  phoneSrv.close();
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} e2e checks passed`);
   process.exit(failed.length ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch(async (e) => { console.error(e); if (globalThis.__failShot) await globalThis.__failShot(); process.exit(1); });

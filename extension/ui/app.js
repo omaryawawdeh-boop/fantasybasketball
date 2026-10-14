@@ -77,6 +77,32 @@
     return { players: HDA.DEFAULT_RANKINGS || [], tierLabels: HDA.DEFAULT_TIER_LABELS || {}, source: 'default' };
   }
 
+  /** The built-in board saved as an edited list (timestamped, so it syncs to the phone like any edit). */
+  function builtInBoardAsList() {
+    const v = HDA.DEFAULT_RANKINGS_VERSION || 'built-in board';
+    return { players: (HDA.DEFAULT_RANKINGS || []).map((p) => ({ ...p })), tierLabels: { ...(HDA.DEFAULT_TIER_LABELS || {}) },
+      source: 'edited', sourceName: v, basedOn: v, importedAt: Date.now() };
+  }
+
+  /** ESPN numbers for your listed players, kept for the phone page (ADP, projected / last FP per game). */
+  async function saveEspnStats(b) {
+    const byName = {};
+    for (const p of b.players) {
+      if (!p.onList) continue;
+      const adp = p.adp ? Math.round(p.adp * 10) / 10 : null;
+      const r1 = (x) => (x == null || !isFinite(x) ? null : Math.round(x * 10) / 10);
+      const o = { adp, proj: r1(p.fppgProj), last: r1(p.fppgLast), gp: p.gamesLastSeason == null ? null : p.gamesLastSeason };
+      if (o.adp || o.proj != null || o.last != null) byName[HDA.normalizeName(p.name)] = o;
+    }
+    if (Object.keys(byName).length) await storage.set('hda:espnStats', { byName, updatedAt: Date.now() });
+  }
+
+  /** Ask the extension to sync with the phone list: 'auto' (quietly, at most every 15 min) or 'open'. */
+  function phoneSync(mode) {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return Promise.resolve({ ok: false, error: 'not in the extension' });
+    return chrome.runtime.sendMessage({ type: 'hda-phone-sync', mode }).catch((e) => ({ ok: false, error: e.message }));
+  }
+
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtAgo = (t) => {
     if (!t) return 'never';
@@ -196,9 +222,9 @@
     const RL = () => state.rankings.tierLabels || {};
     function saveRankings(next, isUndo) {
       if (next.source === 'default') {
-        // Undo all the way back to the built-in board.
-        state.rankings = next;
-        storage.set('hda:rankings', null);
+        // Undo all the way back to the built-in board: saved as your list so the phone gets it too.
+        state.rankings = HDA.builtInBoardAsList();
+        storage.set('hda:rankings', state.rankings);
       } else {
         const base = state.rankings.source === 'default'
           ? HDA.DEFAULT_RANKINGS_VERSION || 'built-in board'
@@ -337,6 +363,9 @@
         const p = getBoard().byKey.get(key);
         if (p) addToList({ name: p.name, team: p.team, pos: p.pos });
       },
+      phoneSync() {
+        phoneSync('open').then((r) => { if (r && r.ok === false && r.error) toast(r.error, 'bad'); });
+      },
       edUndo() {
         const prev = undoStack.pop();
         if (!prev) { toast('Nothing to undo', 'bad'); return; }
@@ -345,8 +374,8 @@
       async edReset() {
         if (!confirm(`Throw away your edits and go back to the built-in board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
         undoStack.push(state.rankings);
-        await storage.set('hda:rankings', null);
-        state.rankings = await loadRankings();
+        state.rankings = HDA.builtInBoardAsList();
+        await storage.set('hda:rankings', state.rankings);
         board = null;
         render();
       },
@@ -774,7 +803,7 @@
           <div><b>Editing your list</b> \u00b7 saves instantly \u00b7 drag \u2807 a row, click a rank number to type a new one, \u25b2\u25bc to nudge, T\u2191/T\u2193 to change tiers, \u2702 to start a new tier.</div>
           <div class="addrow"><input data-addname placeholder="Add player: type a name" value="${esc(state.ui.addName || '')}"><input data-addrank placeholder="at #" inputmode="numeric" value="${esc(state.ui.addRank || '')}" title="Rank to insert at (blank = bottom)"><button class="ghostbtn" data-act="edAddFree">+ Add</button></div>
           ${addMatches(c)}
-          <div class="btnrow"><button class="ghostbtn" data-act="edUndo">\u21b6 Undo</button><button class="ghostbtn" data-act="edReset">Restore built-in board (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})</button></div>
+          <div class="btnrow"><button class="ghostbtn" data-act="edUndo">\u21b6 Undo</button><button class="ghostbtn" data-act="phoneSync" title="Open your phone list page; changes on either side sync, newest wins">\ud83d\udcf1 Sync with phone</button><button class="ghostbtn" data-act="edReset">Restore built-in board (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})</button></div>
           ${stale ? `<div class="warnbox" style="margin:6px 0 0">Your edits are based on ${esc(state.rankings.basedOn)}; a newer board (${esc(HDA.DEFAULT_RANKINGS_VERSION)}) is built in. Use \u201cRestore built-in board\u201d to switch.</div>` : ''}
         </div>`;
       }
@@ -949,7 +978,7 @@
         const sigOf = () => (state.espn.league ? JSON.stringify(state.espn.league.draft.picks.map((p) => p.overall + ':' + p.espnId)) : '') + '|' + state.espn.status;
         const prevSig = sigOf();
         Object.assign(state.espn, patch);
-        if (patch.players) { state.espn.playersAt = Date.now(); board = null; }
+        if (patch.players) { state.espn.playersAt = Date.now(); board = null; if (state.espn.players.length) saveEspnStats(getBoard()).catch(() => {}); }
         // Redraw only when something you'd see changed; a routine poll just refreshes the status line.
         if (patch.players || sigOf() !== prevSig) render();
         else renderSyncOnly();
@@ -1148,5 +1177,5 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .odds .na{font-size:11px;color:var(--muted);font-style:italic}
 `;
 
-  Object.assign(HDA, { createApp, storage, defaultSettings, migrateSettings, loadRankings });
+  Object.assign(HDA, { builtInBoardAsList, phoneSync, createApp, storage, defaultSettings, migrateSettings, loadRankings });
 })(typeof globalThis !== 'undefined' ? globalThis : this);
