@@ -90,9 +90,26 @@
       rookie: !!(r && r.rookie),
       note: (r && r.note) || null,
       fppg: null,
+      fppgProj: null,
+      fppgLast: null,
+      fppgLastSource: null,
+      mktRank: null,
       statSource: e ? e.statSource : null,
     };
     if (e && e.statLine && scoringItems && scoringItems.length) bp.fppg = HDA.fantasyPoints(e.statLine, scoringItems);
+    // Edit-view numbers: projected and last-season fantasy points per game in YOUR scoring.
+    if (e && scoringItems && scoringItems.length) {
+      if (e.projLine) bp.fppgProj = HDA.fantasyPoints(e.projLine, scoringItems);
+      if (e.lastLine) { bp.fppgLast = HDA.fantasyPoints(e.lastLine, scoringItems); bp.fppgLastSource = 'ESPN'; }
+    }
+    // Fallback when ESPN isn't loaded: your tier sheet's 2025-26 numbers (already in your scoring).
+    const sheet = HDA.TIER_SHEET_STATS && HDA.TIER_SHEET_STATS.byName ? HDA.TIER_SHEET_STATS.byName.get(HDA.normalizeName(r ? r.name : name)) || HDA.TIER_SHEET_STATS.byName.get(HDA.normalizeName(name)) : null;
+    if (sheet) {
+      if (bp.fppgLast == null && sheet.fp != null) { bp.fppgLast = sheet.fp; bp.fppgLastSource = 'tier sheet'; }
+      if (bp.gamesLastSeason == null && sheet.gp != null) bp.gamesLastSeason = sheet.gp;
+      if (sheet.mkt != null) bp.mktRank = sheet.mkt;
+      if (sheet.line) bp.lastLineText = sheet.line;
+    }
     return bp;
   }
 

@@ -57,8 +57,22 @@
   }
 
   async function loadRankings() {
-    const saved = await storage.get('hda:rankings', null);
-    // A saved copy of the built-in board is ignored so spreadsheet updates always show up.
+    let saved = await storage.get('hda:rankings', null);
+    // One-time: players added on request (e.g. Aday Mara, Bennett Stirtz) also go into a list
+    // you edited in the extension, next to the same neighbors. Never adds anyone twice.
+    const extras = HDA.DEFAULT_EXTRA_PLAYERS || [];
+    if (saved && saved.source !== 'default' && Array.isArray(saved.players) && extras.length && HDA.rankEdit) {
+      const done = (await storage.get('hda:migrations', {})) || {};
+      const todo = extras.filter((e) => !done['extra:' + e.name]);
+      if (todo.length) {
+        let cur = { players: saved.players, tierLabels: saved.tierLabels || {} };
+        for (const e of todo) { cur = HDA.rankEdit.insertBefore(cur.players, cur.tierLabels, e, e.before); done['extra:' + e.name] = Date.now(); }
+        saved = { ...saved, players: cur.players, tierLabels: cur.tierLabels, importedAt: Date.now() };
+        await storage.set('hda:rankings', saved);
+        await storage.set('hda:migrations', done);
+      }
+    }
+    // A saved copy of the built-in board is ignored so updates to it always show up.
     if (saved && saved.source !== 'default' && Array.isArray(saved.players) && saved.players.length) return saved;
     return { players: HDA.DEFAULT_RANKINGS || [], tierLabels: HDA.DEFAULT_TIER_LABELS || {}, source: 'default' };
   }
@@ -203,6 +217,14 @@
       if (isUndo) toast('Undone');
       render();
     }
+    function addToList(entry) {
+      const rank = Number(state.ui.addRank) > 0 ? Number(state.ui.addRank) : null;
+      if (RP().some((p) => HDA.normalizeName(p.name) === HDA.normalizeName(entry.name))) { toast(`${entry.name} is already on your list`, 'bad'); return; }
+      state.ui.addName = '';
+      state.ui.addRank = '';
+      applyEdit(HDA.rankEdit.insertAt(RP(), RL(), entry, rank), `Added ${entry.name} at #${rank ? Math.min(rank, RP().length + 1) : RP().length + 1}`);
+    }
+
     function applyEdit(next, msg) {
       if (next.players === state.rankings.players && next.tierLabels === state.rankings.tierLabels) return; // no-op
       undoStack.push(state.rankings);
@@ -303,13 +325,25 @@
         }
         applyEdit(HDA.rankEdit.insertAt(RP(), RL(), { name: p.name, team: p.team, pos: p.pos }, rank), `Added ${p.name} ${where === 'next' ? 'as your next pick' : 'at the bottom'}`);
       },
+      edAddFree() {
+        const name = (state.ui.addName || '').trim();
+        if (name.length < 3) { toast('Type a player name first', 'bad'); return; }
+        const c = compute();
+        const q = HDA.normalizeName(name);
+        const hit = c.board.players.find((p) => !p.onList && HDA.normalizeName(p.name) === q) || c.board.players.find((p) => !p.onList && HDA.normalizeName(p.name).includes(q));
+        addToList(hit ? { name: hit.name, team: hit.team, pos: hit.pos } : { name });
+      },
+      edAddPick(key) {
+        const p = getBoard().byKey.get(key);
+        if (p) addToList({ name: p.name, team: p.team, pos: p.pos });
+      },
       edUndo() {
         const prev = undoStack.pop();
         if (!prev) { toast('Nothing to undo', 'bad'); return; }
         saveRankings(prev, true);
       },
       async edReset() {
-        if (!confirm(`Throw away your edits and go back to your spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
+        if (!confirm(`Throw away your edits and go back to the built-in board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
         undoStack.push(state.rankings);
         await storage.set('hda:rankings', null);
         state.rankings = await loadRankings();
@@ -373,6 +407,15 @@
         renderBody();
         return;
       }
+      if (el.dataset.addname != null || el.dataset.addrank != null) {
+        if (el.dataset.addname != null) state.ui.addName = el.value; else state.ui.addRank = el.value;
+        const which = el.dataset.addname != null ? '[data-addname]' : '[data-addrank]';
+        const pos = el.selectionStart;
+        renderBody();
+        const again = rootEl.querySelector(which);
+        if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) { /* number-ish input */ } }
+        return;
+      }
       if (el.dataset.setting) {
         let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
         if (el.dataset.setting === 'syncMode') v = el.checked ? 'manual' : 'auto';
@@ -428,6 +471,7 @@
         } else if (ev.key === 'Escape') { state.ui.rankEditing = null; render(); }
         return;
       }
+      if (ev.key === 'Enter' && (ev.target.dataset.addname != null || ev.target.dataset.addrank != null)) { actions.edAddFree(); return; }
       if (ev.key === 'Enter' && ev.target.dataset.search != null) {
         const first = rootEl.querySelector('[data-first-hit]');
         if (first) { actions.take(first.dataset.firstHit); ev.target.select(); }
@@ -483,7 +527,7 @@
     }
 
     function statusText() {
-      if (!sync) return 'Manual tracking';
+      if (!sync) return state.espn.players.length ? `Manual tracking \u00b7 ESPN player data loaded ${fmtAgo(state.espn.lastOk)}` : 'Manual tracking';
       if (state.settings.syncMode === 'manual') return 'Manual mode (sync off)';
       const s = state.espn.status;
       if (s === 'ok') {
@@ -535,7 +579,7 @@
     }
 
     function oddsRow(o, targets) {
-      if (!o || o.every((x) => x == null)) return '<div class="odds"><span class="na">no ESPN ADP \u2014 odds unavailable</span></div>';
+      if (!o || o.every((x) => x == null)) return ''; // no ESPN ADP for him: nothing to estimate
       return `<div class="odds">${o.map((x, i) => {
         const pct = Math.round(x * 100);
         const cls = pct >= 70 ? 'hi' : pct >= 30 ? 'mid' : 'lo';
@@ -550,8 +594,21 @@
     function stats(p) {
       const parts = [];
       if (p.adp) parts.push(`<span title="ESPN average draft position">ADP ${p.adp}</span>`);
-      if (p.fppg != null) parts.push(`<span title="${esc(p.statSource || '')} in your scoring">${p.fppg} FP/G</span>`);
+      if (p.fppgProj != null) parts.push(`<span title="ESPN projection for this season, in your scoring">Proj ${p.fppgProj}</span>`);
+      else if (p.fppg != null) parts.push(`<span title="${esc(p.statSource || '')} in your scoring">${p.fppg} FP/G</span>`);
+      if (p.fppgLast != null) parts.push(`<span title="Last season (2025-26) fantasy points per game in your scoring, from ${esc(p.fppgLastSource || '')}">Last ${p.fppgLast}${p.gamesLastSeason != null ? ` (${p.gamesLastSeason} GP)` : ''}</span>`);
       return parts.join('');
+    }
+
+    /** Fuller stat block for edit mode: always shows the three numbers, with dashes when unknown. */
+    function editStats(p) {
+      const adp = p.adp ? `ADP <b>${p.adp}</b>` : p.mktRank ? `Mkt <b>#${p.mktRank}</b>` : 'ADP <b>\u2013</b>';
+      const proj = p.fppgProj != null ? p.fppgProj : p.fppg != null && /projection/.test(p.statSource || '') ? p.fppg : null;
+      return `<div class="edstats">
+        <span title="${p.adp ? 'ESPN average draft position' : p.mktRank ? 'Cross-platform market rank from your tier sheet (Oct 6); ESPN ADP loads when ESPN data is available' : 'No ADP yet'}">${adp}</span>
+        <span title="Last season (2025-26) fantasy points per game in your scoring${p.fppgLastSource ? ', from ' + esc(p.fppgLastSource) : ''}">Last <b>${p.fppgLast != null ? p.fppgLast : '\u2013'}</b>${p.gamesLastSeason != null ? ` <i>${p.gamesLastSeason} GP</i>` : ''}</span>
+        <span title="ESPN's projection for this season, in your scoring">Proj <b>${proj != null ? proj : '\u2013'}</b></span>
+      </div>`;
     }
 
     function espnBtn(p, c, big) {
@@ -674,6 +731,15 @@
       return `<div class="search"><input data-search placeholder="Find player — Enter marks first match drafted" value="${esc(state.ui.search)}"></div>`;
     }
 
+    /** ESPN players not on your list that match the Add box (click one to add him). */
+    function addMatches(c) {
+      const q = HDA.normalizeName(state.ui.addName || '');
+      if (q.length < 3) return '';
+      const hits = c.board.players.filter((p) => !p.onList && HDA.normalizeName(p.name).includes(q)).slice(0, 5);
+      if (!hits.length) return `<div class="foot" style="margin:4px 0">${c.board.players.some((p) => !p.onList) ? 'No ESPN match \u2014 + Add will add the name as typed.' : 'ESPN player data isn\u2019t loaded, so + Add uses the name as typed.'}</div>`;
+      return `<div class="chips addhits">${hits.map((p) => `<button class="chip" data-act="edAddPick" data-arg="${esc(p.key)}">${esc(p.name)} <i>${esc([p.team, (p.pos || []).join('/')].filter(Boolean).join(' '))}${p.adp ? ' \u00b7 ADP ' + p.adp : ''}</i></button>`).join('')}</div>`;
+    }
+
     function editRow(p) {
       const r = p.myRank;
       const rk = state.ui.rankEditing === r
@@ -681,7 +747,8 @@
         : `<button class="rkbtn" data-act="edRankStart" data-arg="${r}" title="Click to type a new rank">${r}</button>`;
       return `<li class="prow edit ${p.drafted ? 'gone' : ''} ${p.mine ? 'mine' : ''}" draggable="true" data-rank="${r}">
         <span class="grip" title="Drag to move">\u2807</span>${rk}
-        <div class="who"><div class="nm">${esc(p.name)}</div><div class="sub">${meta(p)}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
+        <div class="who"><div class="nm">${esc(p.name)}${p.rookie ? ' <span class="b b-rk">ROOKIE</span>' : ''}</div><div class="sub">${meta(p)}${p.age != null ? `<span>age ${p.age}</span>` : ''}${p.overall ? `<span>pick ${p.overall}</span>` : ''}</div>
+          ${editStats(p)}
           <div class="edflags"><button class="flagbtn ${p.dontReach ? 'on dr' : ''}" data-act="edFlag" data-arg="${r}|dontReach" title="Toggle Don't Reach">DR</button><button class="flagbtn ${p.injuryProne ? 'on inj' : ''}" data-act="edFlag" data-arg="${r}|injuryProne" title="Toggle injury prone">INJ*</button></div></div>
         <div class="edbtns">
           <button class="sm" data-act="edMove" data-arg="${r}|-1" title="Up one">\u25b2</button><button class="sm" data-act="edTier" data-arg="${r}|-1" title="Move to the tier above">T\u2191</button><button class="sm" data-act="edSplit" data-arg="${r}" title="Start a new tier at this player">\u2702</button>
@@ -696,7 +763,8 @@
       let firstHit = null;
       const av = c.avail;
       const sug = c.draft.complete ? null : c.sug;
-      const showOdds = av && av.targets.length && av.sims;
+      // Only when ESPN ADP is loaded (otherwise there's nothing to simulate).
+      const showOdds = av && av.targets.length && av.sims && [...av.odds.values()].some((o) => o && o.some((x) => x != null));
       const edit = !!state.ui.edit;
       let html = `${renderSearch()}<div class="tools"><label><input type="checkbox" ${state.ui.hideDrafted ? 'checked' : ''} data-act="hideDrafted"> Hide drafted</label>
         <button class="ghostbtn ${edit ? 'editon' : ''}" data-act="editToggle">${edit ? '\u2713 Done editing' : '\u270e Edit list'}</button></div>`;
@@ -704,8 +772,10 @@
         const stale = state.rankings.source === 'edited' && /^Ranking /.test(state.rankings.basedOn || '') && HDA.DEFAULT_RANKINGS_VERSION && state.rankings.basedOn !== HDA.DEFAULT_RANKINGS_VERSION;
         html += `<div class="editbar">
           <div><b>Editing your list</b> \u00b7 saves instantly \u00b7 drag \u2807 a row, click a rank number to type a new one, \u25b2\u25bc to nudge, T\u2191/T\u2193 to change tiers, \u2702 to start a new tier.</div>
-          <div class="btnrow"><button class="ghostbtn" data-act="edUndo">\u21b6 Undo</button><button class="ghostbtn" data-act="edReset">Restore spreadsheet (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})</button></div>
-          ${stale ? `<div class="warnbox" style="margin:6px 0 0">Your edits are based on ${esc(state.rankings.basedOn)}; a newer board (${esc(HDA.DEFAULT_RANKINGS_VERSION)}) is built in. Use \u201cRestore spreadsheet\u201d to switch.</div>` : ''}
+          <div class="addrow"><input data-addname placeholder="Add player: type a name" value="${esc(state.ui.addName || '')}"><input data-addrank placeholder="at #" inputmode="numeric" value="${esc(state.ui.addRank || '')}" title="Rank to insert at (blank = bottom)"><button class="ghostbtn" data-act="edAddFree">+ Add</button></div>
+          ${addMatches(c)}
+          <div class="btnrow"><button class="ghostbtn" data-act="edUndo">\u21b6 Undo</button><button class="ghostbtn" data-act="edReset">Restore built-in board (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})</button></div>
+          ${stale ? `<div class="warnbox" style="margin:6px 0 0">Your edits are based on ${esc(state.rankings.basedOn)}; a newer board (${esc(HDA.DEFAULT_RANKINGS_VERSION)}) is built in. Use \u201cRestore built-in board\u201d to switch.</div>` : ''}
         </div>`;
       }
       if (showOdds && !edit) {
@@ -1004,6 +1074,16 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .ghostbtn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px}
 .ghostbtn.danger{color:var(--bad)}
 .muted{color:var(--muted)}
+.edstats{display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:3px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.edstats b{color:var(--ink);font-weight:700}
+.edstats i{font-style:normal;color:var(--muted)}
+.addrow{display:flex;gap:5px;margin-top:7px}
+.addrow input{background:#0b0e13;border:1px solid var(--line);border-radius:6px;color:var(--ink);font:inherit;font-size:12px;padding:5px 7px}
+.addrow input[data-addname]{flex:1;min-width:0}
+.addrow input[data-addrank]{width:52px}
+.addhits{margin-top:5px}
+.addhits .chip{cursor:pointer;color:var(--ink)}
+.addhits .chip i{color:var(--muted)}
 .editbar{background:#1c2846;border:1px solid var(--mine);border-radius:8px;padding:8px 10px;font-size:12px;margin:6px 0;color:#c9d6ff}
 .editbar .btnrow{margin-top:6px;flex-wrap:wrap}
 .ghostbtn.editon{background:var(--mine);color:#0b1430;border-color:var(--mine);font-weight:800}
@@ -1068,5 +1148,5 @@ nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
 .odds .na{font-size:11px;color:var(--muted);font-style:italic}
 `;
 
-  Object.assign(HDA, { createApp, storage, defaultSettings, migrateSettings });
+  Object.assign(HDA, { createApp, storage, defaultSettings, migrateSettings, loadRankings });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

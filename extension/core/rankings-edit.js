@@ -131,6 +131,20 @@
     return normalize(arr, tierLabels);
   }
 
+  /** Add a player just before `anchorName` (same tier as the anchor); at the bottom if the anchor is missing. */
+  function insertBefore(players, tierLabels, entry, anchorName) {
+    const norm = HDA.normalizeName(entry.name);
+    if (players.some((p) => HDA.normalizeName(p.name) === norm)) return { players, tierLabels };
+    const arr = clone(players);
+    const at = arr.findIndex((p) => HDA.normalizeName(p.name) === HDA.normalizeName(anchorName));
+    const idx = at < 0 ? arr.length : at;
+    const tier = at < 0 ? (arr.length ? arr[arr.length - 1].tier : 1) : arr[at].tier;
+    const p = { name: entry.name, team: entry.team || null, pos: entry.pos || [], tier };
+    for (const k of ['rookie', 'injuryProne', 'dontReach', 'note']) if (entry[k]) p[k] = entry[k];
+    arr.splice(idx, 0, p);
+    return normalize(arr, tierLabels);
+  }
+
   function renameTier(players, tierLabels, tier, label) {
     const labels = { ...(tierLabels || {}) };
     if (label && label.trim()) labels[tier] = label.trim();
@@ -138,6 +152,6 @@
     return { players, tierLabels: labels };
   }
 
-  HDA.rankEdit = { normalize, moveTo, moveBy, moveToTierStart, changeTier, splitTier, mergeTier, toggleFlag, removeAt, insertAt, renameTier };
+  HDA.rankEdit = { insertBefore, normalize, moveTo, moveBy, moveToTierStart, changeTier, splitTier, mergeTier, toggleFlag, removeAt, insertAt, renameTier };
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

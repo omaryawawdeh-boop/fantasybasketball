@@ -16,6 +16,15 @@
       + (settings.leagueId ? `<span><a href="?league=${settings.leagueId}">Follow ESPN league ${settings.leagueId}</a></span>` : '');
     const app = await HDA.createApp({ host, mode: 'standalone', draftId: 'standalone' });
     if (params.get('edit')) app.startEdit();
+    // Even with no draft running, pull ESPN's ADP / projections / last season and your
+    // league's scoring so the board (and edit view) can show them.
+    if (settings.leagueId) {
+      const msg = await HDA.loadPlayerData({
+        app, leagueId: settings.leagueId, seasonId, fetchJson: HDA.directFetchJson,
+        fetchPublic: (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      });
+      app.toast(msg, /unavailable/.test(msg) ? 'bad' : 'ok');
+    }
     return;
   }
   bar.innerHTML = `<span>Following <b>ESPN league ${leagueId}</b> live (read-only, uses your ESPN login).</span><span><a href="?manual=1">Switch to manual board</a></span>`;

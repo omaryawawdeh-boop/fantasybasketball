@@ -119,6 +119,27 @@
     return { tick, stop() { stopped = true; clearTimeout(timer); } };
   }
 
+  /**
+   * One-off load of ESPN player data (ADP, projections, last season, ages) and
+   * your league's scoring, for when no draft is running (the edit page).
+   * Doesn't sync picks. Returns a short status string.
+   */
+  async function loadPlayerData({ app, leagueId, seasonId, fetchJson, fetchPublic }) {
+    const urls = HDA.draftUrls(seasonId, leagueId);
+    let league = null;
+    try { league = HDA.parseLeague(await fetchJson(urls.league)); } catch (e) { /* players may still load */ }
+    let players = [];
+    try { players = HDA.parsePlayers(await fetchJson(urls.players, urls.playersHeaders), seasonId); } catch (e) { /* try the open pool */ }
+    if (!players.length) {
+      try { players = HDA.parsePlayers(await fetchJson(urls.playerPool, urls.playerPoolHeaders), seasonId); } catch (e) { /* offline */ }
+    }
+    if (!players.length) return 'ESPN player data unavailable (log in at fantasy.espn.com); showing your tier sheet numbers.';
+    app.setEspn({ league, players, lastOk: Date.now(), message: 'ESPN player data (no live draft)' });
+    const ids = players.slice().sort((x, y) => (x.espnRank || 999) - (y.espnRank || 999)).slice(0, 300).map((p) => p.espnId);
+    loadAges(ids, fetchPublic || fetchJson).then((r) => app.setAges(r.ages, r)).catch(() => {});
+    return `Loaded ESPN data for ${players.length} players${league && league.scoringItems.length ? ' and your league scoring' : ''}.`;
+  }
+
   /** Direct fetch from an extension page (host permissions, ESPN login cookies). */
   async function directFetchJson(url, headers) {
     const r = await fetch(url, { credentials: 'include', headers: headers || {} });
@@ -126,5 +147,5 @@
     return r.json();
   }
 
-  Object.assign(HDA, { startEspnSync, directFetchJson, loadAges });
+  Object.assign(HDA, { startEspnSync, directFetchJson, loadAges, loadPlayerData });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

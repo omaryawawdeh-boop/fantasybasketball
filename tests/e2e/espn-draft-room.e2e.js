@@ -352,7 +352,7 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   opts.on('pageerror', (e) => console.log('OPTIONS ERROR', e.message));
   await opts.goto(`chrome-extension://${extId}/options/options.html`);
   await opts.locator('#current').waitFor();
-  check('options shows 178-player board (Ranking 14)', /178/.test(await opts.locator('#current').innerText()));
+  check('options shows 180-player board (my edits + Mara, Stirtz)', /180/.test(await opts.locator('#current').innerText()));
   await opts.locator('#importBox summary').click();
   await opts.locator('#paste').fill('Nikola Jokic\t\nVictor Wembanyama*\t\nJosh Giddey\tDR');
   await opts.locator('#preview').click();
@@ -377,6 +377,36 @@ const pick = (overall, teamId, name) => picks.push({ overallPickNumber: overall,
   check('follow board syncs league and shares marks with draft room', ftop.includes(remaining[1].name), ftop);
   check('follow board knows I am on the clock', /ON THE CLOCK/.test(await follow.locator('#app .clock').innerText()));
   await follow.screenshot({ path: path.join(OUT, '7-follow-board.png') });
+
+  // Edit page with no draft running: ESPN data (league 4242 saved in Options) + tier sheet numbers.
+  const ed = await ctx.newPage();
+  ed.on('pageerror', (e) => console.log('EDIT ERROR', e.message));
+  await ed.goto(`chrome-extension://${extId}/standalone/board.html?manual=1&edit=1`);
+  const ea = ed.locator('#app');
+  await ea.locator('.prow.edit').first().waitFor();
+  await ed.waitForFunction(() => /ADP <b>\d/.test(document.querySelector('#app').shadowRoot.querySelector('.prow.edit .edstats').innerHTML), null, { timeout: 15000 }).catch(() => {});
+  const sheetCade = HDA.TIER_SHEET_STATS.byName.get('cade cunningham');
+  await ea.locator('[data-search]').fill('cunningham');
+  const cade = await ea.locator('.prow.edit', { hasText: 'Cade Cunningham' }).locator('.edstats').innerText();
+  check(`edit view shows ADP, last season FP/G (tier sheet: ${sheetCade.fp}, ${sheetCade.gp} GP) and projected FP/G`,
+    /ADP \d/.test(cade) && cade.includes(`Last ${sheetCade.fp}`) && cade.includes(`${sheetCade.gp} GP`) && /Proj \d/.test(cade), cade.replace(/\n/g, ' '));
+  await ea.locator('[data-search]').fill('jokic');
+  const jok = await ea.locator('.prow.edit', { hasText: 'Nikola Jokic' }).locator('.edstats').innerText();
+  await ea.locator('[data-search]').fill('');
+  check('no ESPN ADP -> falls back to market rank from the tier sheet', /Mkt #2/.test(jok), jok.replace(/\n/g, ' '));
+  check('Aday Mara and Bennett Stirtz are on the list', (await ea.locator('.prow.edit', { hasText: 'Aday Mara' }).count()) === 1 && (await ea.locator('.prow.edit', { hasText: 'Bennett Stirtz' }).count()) === 1);
+  await ea.locator('[data-addname]').fill('offlist');
+  await ea.locator('.addhits .chip').first().waitFor({ timeout: 5000 });
+  await ea.locator('[data-addrank]').fill('3');
+  await ea.locator('.addhits .chip').first().click();
+  const third = await ea.locator('.prow.edit').nth(2).locator('.nm').innerText();
+  check('Add player box: ESPN match added at the typed rank (#3)', /Zed Offlist/.test(third), third);
+  await ea.locator('[data-addname]').fill('Totally Newguy');
+  await ea.locator('[data-addname]').press('Enter');
+  check('Add player box: a name ESPN doesn\'t know is added as typed (at the bottom)', /Totally Newguy/.test(await ea.locator('.prow.edit').last().locator('.nm').innerText()));
+  await ed.screenshot({ path: path.join(OUT, '12-edit-stats.png') });
+  ed.on('dialog', (d) => d.accept());
+  await ea.locator('[data-act="edReset"]').click();
 
   await ctx.close();
   const failed = results.filter((r) => !r.ok);

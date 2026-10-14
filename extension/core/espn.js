@@ -82,6 +82,10 @@
     const rank = (ranks.STANDARD && ranks.STANDARD.rank) || (ranks.PPR && ranks.PPR.rank) || null;
     const adp = p.ownership && p.ownership.averageDraftPosition > 0 ? Math.round(p.ownership.averageDraftPosition * 10) / 10 : null;
     const { line, source } = pickStatLine(p.stats, seasonId);
+    // Separate lines for the edit view: this season's projection and last season's actual averages.
+    const st = Array.isArray(p.stats) ? p.stats : [];
+    const projEntry = st.find((x) => x.statSourceId === 1 && x.statSplitTypeId === 0 && x.seasonId === seasonId && x.averageStats);
+    const lastEntry = st.find((x) => x.statSourceId === 0 && x.statSplitTypeId === 0 && x.seasonId === seasonId - 1 && x.averageStats);
     // Games played last season (ESPN stat 42 in last season's totals).
     let gamesLastSeason = null;
     const lastTotals = Array.isArray(p.stats) && p.stats.find((st) => st.statSourceId === 0 && st.statSplitTypeId === 0 && st.seasonId === seasonId - 1 && st.stats);
@@ -99,6 +103,8 @@
       injury: p.injuryStatus && p.injuryStatus !== 'ACTIVE' ? p.injuryStatus : null,
       statLine: line,
       statSource: source,
+      projLine: projEntry ? projEntry.averageStats : null,
+      lastLine: lastEntry ? lastEntry.averageStats : null,
       gamesLastSeason,
     };
   }

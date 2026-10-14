@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Rebuild the built-in draft board from Omar's ranking spreadsheet.
+"""Rebuild the built-in draft board.
 
+    python3 scripts/build_rankings.py data/omar-board.txt "My edits (Oct 14)"     # the list as edited in the extension
     python3 scripts/build_rankings.py "Copy of Fantasy Basketball Ranking 9.xlsx" "Ranking 9"
+
+data/omar-board.txt is the list copied from the extension: "T|n|Tier name" lines
+start tiers; player lines are "Name|TEAM|POS|flags" (flags: *, DR, ROOKIE).
 
 Column A = player in draft order ("Name*" = injury prone), column B = "DR" flag.
 Order comes ONLY from the spreadsheet. Tier breaks are fixed rank ranges from the
@@ -43,6 +47,15 @@ DOB_FALLBACK = {
     'Draymond Green': '1990-03-04', 'Anthony Davis': '1993-03-11',
 }
 
+# Players added on request, placed relative to a neighbor so they land in the same
+# spot in an edited list too (inserted just BEFORE the anchor).
+EXTRA_PLAYERS = [
+    {'name': 'Aday Mara', 'pos': ['C'], 'rookie': True, 'before': 'Isaiah Collier',
+     'note': 'Added by Claude: 7-3 rookie center. Blocks and boards fit your scoring (BLK is 3 pts), but rookie bigs rarely get starter minutes early. Stash range; move him up if he wins a rotation spot.'},
+    {'name': 'Bennett Stirtz', 'pos': ['PG', 'SG'], 'rookie': True, 'before': 'Jaden Ivey',
+     'note': 'Added by Claude: polished rookie guard (Drake, Iowa). Scoring guard without many steals/blocks/rebounds, which your scoring rewards most. Deep flier unless he lands real minutes.'},
+]
+
 LEAGUE = {'espnLeagueId': 888634487, 'private': True, 'teams': 14, 'mySlot': 4, 'rounds': 13, 'format': 'H2H_POINTS',
           'rosterSlots': {'PG': 1, 'SG': 1, 'SF': 1, 'PF': 1, 'C': 1, 'G': 1, 'F': 1, 'UTIL': 3, 'BE': 3},
           'scoringWeights': {'FGM': 2, 'FTM': 1, '3PM': 1, 'REB': 1, 'AST': 1, 'STL': 3, 'BLK': 3, 'TO': -1, 'DD': 3, 'TD': 5}}
@@ -62,8 +75,29 @@ def tier_of(rank):
     return len(TIERS)
 
 
+def read_board_txt(path):
+    rows, labels, tier = [], {}, 1
+    for line in open(path, encoding='utf-8'):
+        line = line.rstrip('\n')
+        if not line.strip():
+            continue
+        parts = line.split('|')
+        if parts[0] == 'T':
+            tier = int(parts[1])
+            if len(parts) > 2 and parts[2]:
+                labels[tier] = parts[2]
+            continue
+        name, team, pos, flags = (parts + ['', '', '', ''])[:4]
+        f = flags.split()
+        rows.append({'name': name.strip(), 'team': team or None, 'pos': [x for x in pos.split('/') if x], 'tier': tier,
+                     'injuryProne': '*' in f, 'dontReach': 'DR' in f, 'rookie': 'ROOKIE' in f})
+    return rows, labels
+
+
 def main(xlsx, source_label):
     old = {norm(r['player']): r for r in csv.DictReader(open(CSV_PATH, encoding='utf-8'))}
+    if xlsx.endswith('.txt'):
+        return main_board(xlsx, source_label, old)
     ws = openpyxl.load_workbook(xlsx, data_only=True).worksheets[0]
     out, seen = [], set()
     for row in ws.iter_rows(values_only=True):
@@ -88,6 +122,30 @@ def main(xlsx, source_label):
         if not meta:
             print(f'new to the list: #{rank} {name}', file=sys.stderr)
 
+    write_outputs(out, {i + 1: t[2] for i, t in enumerate(TIERS)}, source_label)
+
+
+def main_board(path, source_label, old):
+    rows, labels = read_board_txt(path)
+    out = []
+    for r in rows:
+        meta = old.get(norm(r['name']), {})
+        out.append({**r, 'team': r['team'] or meta.get('team') or None, 'pos': r['pos'] or [p for p in (meta.get('pos') or '').split('/') if p],
+                    'note': meta.get('note') or '', 'dob': DOB_FALLBACK.get(r['name'])})
+    for extra in EXTRA_PLAYERS:
+        if any(norm(o['name']) == norm(extra['name']) for o in out):
+            continue
+        at = next((i for i, o in enumerate(out) if norm(o['name']) == norm(extra['before'])), len(out))
+        tier = out[at]['tier'] if at < len(out) else out[-1]['tier']
+        out.insert(at, {'name': extra['name'], 'team': None, 'pos': extra['pos'], 'tier': tier, 'injuryProne': False,
+                        'dontReach': False, 'rookie': extra['rookie'], 'note': extra['note'], 'dob': None})
+        print(f"added #{at + 1} {extra['name']} (before {extra['before']})", file=sys.stderr)
+    for i, o in enumerate(out):
+        o['rank'] = i + 1
+    write_outputs(out, labels, source_label)
+
+
+def write_outputs(out, labels, source_label):
     with open(CSV_PATH, 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
         w.writerow(['rank', 'player', 'tier', 'team', 'pos', 'flags', 'note'])
@@ -95,7 +153,6 @@ def main(xlsx, source_label):
             fl = ' '.join(x for x, c in (('*', o['injuryProne']), ('DR', o['dontReach']), ('ROOKIE', o['rookie'])) if c)
             w.writerow([o['rank'], o['name'], o['tier'], o['team'] or '', '/'.join(o['pos']), fl, o['note']])
 
-    labels = {i + 1: t[2] for i, t in enumerate(TIERS)}
     players = []
     for o in out:
         p = {k: v for k, v in o.items() if v not in (None, '', [], False) or k in ('rank', 'name', 'tier', 'pos')}
@@ -111,6 +168,7 @@ def main(xlsx, source_label):
   HDA.DEFAULT_LEAGUE = {json.dumps(LEAGUE)};
   HDA.DEFAULT_TIER_LABELS = {json.dumps(labels)};
   HDA.DEFAULT_RANKINGS = {json.dumps(players, ensure_ascii=False)};
+  HDA.DEFAULT_EXTRA_PLAYERS = {json.dumps([{k: v for k, v in e.items()} for e in EXTRA_PLAYERS], ensure_ascii=False)};
   if (typeof module !== 'undefined' && module.exports) module.exports = HDA;
 }})(typeof globalThis !== 'undefined' ? globalThis : this);
 '''

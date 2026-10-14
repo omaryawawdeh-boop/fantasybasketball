@@ -4,7 +4,7 @@
   const { storage } = HDA;
 
   let settings = HDA.migrateSettings({ ...HDA.defaultSettings(), ...(await storage.get('hda:settings', {})) });
-  let rankings = await storage.get('hda:rankings', null);
+  let rankings = await HDA.loadRankings(); // includes the one-time additions to an edited list
   const defaults = () => ({ players: HDA.DEFAULT_RANKINGS, tierLabels: HDA.DEFAULT_TIER_LABELS, source: 'default' });
   if (!rankings || rankings.source === 'default' || !rankings.players || !rankings.players.length) rankings = defaults();
   let pending = null;
@@ -16,7 +16,7 @@
       <span><b>${tiers}</b> tiers</span>
       <span><b>${rankings.players.filter((p) => p.dontReach).length}</b> DR</span>
       <span><b>${rankings.players.filter((p) => p.injuryProne).length}</b> injury prone</span>
-      <span>Source: <b>${rankings.source === 'default' ? `your spreadsheet (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})` : esc(rankings.sourceName || 'imported list')}</b></span>
+      <span>Source: <b>${rankings.source === 'default' ? `built-in board (${esc(HDA.DEFAULT_RANKINGS_VERSION || 'built-in')})` : esc(rankings.sourceName || 'imported list')}</b></span>
       <span>Top 3: ${rankings.players.slice(0, 3).map((p) => esc(p.name)).join(', ')}</span>`;
   }
 
@@ -74,7 +74,7 @@
     preview();
   };
   $('resetDefault').onclick = async () => {
-    if (!confirm(`Replace your current board with your spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
+    if (!confirm(`Replace your current board with the built-in board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})?`)) return;
     rankings = defaults();
     await storage.set('hda:rankings', null); // no copy: always use the built-in board
     renderCurrent();
@@ -191,7 +191,7 @@
   }
   $('testLeague').onclick = testLeague;
 
-  $('resetDefault').textContent = `Restore my spreadsheet board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})`;
+  $('resetDefault').textContent = `Restore built-in board (${HDA.DEFAULT_RANKINGS_VERSION || 'built-in'})`;
   // ----- team balance -----
   function renderFit() {
     const f = settings.fit || {};

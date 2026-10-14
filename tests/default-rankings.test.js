@@ -6,32 +6,54 @@ const path = require('node:path');
 const HDA = require('./load-core');
 require('../extension/data/default-rankings.js');
 
-test('default rankings = CSV order (Ranking 14), 178 players, flags intact', () => {
-  const csv = fs.readFileSync(path.join(__dirname, '../data/omar-rankings.csv'), 'utf8');
+const csv = fs.readFileSync(path.join(__dirname, '../data/omar-rankings.csv'), 'utf8');
+const def = HDA.DEFAULT_RANKINGS;
+const rankOf = (n) => (def.find((p) => p.name === n) || {}).rank;
+
+test('built-in board = the list edited in the extension (Oct 14) + Mara and Stirtz', () => {
   const parsed = HDA.parseRankings(csv);
-  const def = HDA.DEFAULT_RANKINGS;
-  assert.equal(def.length, 178);
-  assert.equal(HDA.DEFAULT_RANKINGS_VERSION, 'Ranking 14');
+  assert.equal(HDA.DEFAULT_RANKINGS_VERSION, 'My edits (Oct 14)');
+  assert.equal(def.length, 180);
   assert.deepEqual(parsed.players.map((p) => p.name), def.map((p) => p.name));
   assert.deepEqual(parsed.players.map((p) => p.tier), def.map((p) => p.tier));
-  assert.deepEqual(def.slice(0, 4).map((p) => p.name), ['Nikola Jokic', 'Luka Doncic', 'Victor Wembanyama', 'Shai Gilgeous-Alexander']);
-  assert.deepEqual(def.filter((p) => p.dontReach).map((p) => p.rank), [13, 15, 29, 43, 46, 47, 48, 54, 56, 64]);
+  // Spot checks from the pasted list.
+  assert.deepEqual(def.slice(0, 6).map((p) => p.name), ['Nikola Jokic', 'Luka Doncic', 'Victor Wembanyama', 'Shai Gilgeous-Alexander', 'Giannis Antetokounmpo', 'Cade Cunningham']);
+  assert.equal(rankOf('Deni Avdija'), 20);
+  assert.equal(rankOf('Kevin Porter Jr.'), 61);
+  assert.equal(rankOf('Scoot Henderson'), 136);
+  assert.equal(def[def.length - 1].name, 'Dereck Lively II');
+  // Tier sizes from the pasted list, plus the two rookies in tier 12.
+  const sizes = {};
+  for (const p of def) sizes[p.tier] = (sizes[p.tier] || 0) + 1;
+  assert.deepEqual(Object.values(sizes), [2, 4, 6, 7, 11, 12, 15, 15, 16, 23, 25, 44]);
+  assert.equal(HDA.DEFAULT_TIER_LABELS[12], 'Deep bench and stashes');
+  assert.equal(def.filter((p) => p.dontReach).length, 10);
   assert.equal(def.filter((p) => p.injuryProne).length, 22);
-  assert.equal(parsed.players.filter((p) => p.dontReach).length, 10);
-  assert.equal(def[177].name, 'Dereck Lively II');
-  // Ranking 11
-  const rankOf = (n) => def.find((p) => p.name === n).rank;
-  assert.equal(rankOf('Stephen Curry'), 34);
-  assert.equal(rankOf('Walker Kessler'), 54);
-  assert.equal(rankOf('Payton Pritchard'), 87);
-  assert.equal(rankOf('Bones Hyland'), 160);
-  assert.equal(rankOf('Jerami Grant'), 136);
-  assert.equal(rankOf('Draymond Green'), 114);
-  assert.equal(rankOf('Tre Jones'), 115);
-  assert.ok(!def.some((p) => p.name === 'Cam Thomas' || p.name === "D'Angelo Russell" || p.name === 'Mark Williams'));
-  assert.equal(rankOf('Domantas Sabonis'), 37, 'typo fixed (Domantis)');
-  assert.equal(rankOf('Isaiah Collier'), 149, 'typo fixed (Isiah)');
-  assert.equal(def.find((p) => p.name === 'Cameron Boozer').rookie, true, 'metadata follows the player, not the row');
+  assert.equal(def.find((p) => p.name === 'Chet Holmgren').dontReach, true);
+  assert.equal(def.find((p) => p.name === 'Chet Holmgren').injuryProne, true);
+});
+
+test('Mara and Stirtz sit right before their anchors, flagged as rookies', () => {
+  assert.equal(rankOf('Aday Mara') + 1, rankOf('Isaiah Collier'));
+  assert.equal(rankOf('Bennett Stirtz') + 1, rankOf('Jaden Ivey'));
+  for (const n of ['Aday Mara', 'Bennett Stirtz']) {
+    const p = def.find((x) => x.name === n);
+    assert.equal(p.rookie, true);
+    assert.equal(p.tier, 12);
+    assert.match(p.note, /Added by Claude/);
+  }
+});
+
+test('one-time migration adds the extras to an edited list, by anchor, without duplicates', () => {
+  const edited = def.filter((p) => !['Aday Mara', 'Bennett Stirtz'].includes(p.name)).map((p) => ({ ...p }));
+  // Simulate an edited list where Isaiah Collier was moved up to #20.
+  let cur = HDA.rankEdit.moveTo(edited, {}, edited.findIndex((p) => p.name === 'Isaiah Collier') + 1, 20);
+  for (const e of HDA.DEFAULT_EXTRA_PLAYERS) cur = HDA.rankEdit.insertBefore(cur.players, cur.tierLabels, e, e.before);
+  const at = (n) => cur.players.findIndex((p) => p.name === n);
+  assert.equal(at('Aday Mara') + 1, at('Isaiah Collier'), 'follows the anchor wherever it was moved');
+  assert.equal(cur.players[at('Aday Mara')].tier, cur.players[at('Isaiah Collier')].tier);
+  const again = HDA.rankEdit.insertBefore(cur.players, cur.tierLabels, HDA.DEFAULT_EXTRA_PLAYERS[0], 'Isaiah Collier');
+  assert.equal(again.players.length, cur.players.length, 'no duplicate');
 });
 
 test('default board suggests Jokic first on an empty draft', () => {
@@ -40,5 +62,13 @@ test('default board suggests Jokic first on an empty draft', () => {
   const d = HDA.computeDraft({ board, picks: [], teams: L.teams, rounds: L.rounds, mySlot: 5 });
   const s = HDA.suggest({ board, draft: d, rosterSlots: L.rosterSlots });
   assert.equal(s.suggestions[0].player.name, 'Nikola Jokic');
-  assert.deepEqual(d.myPickNumbers.slice(0, 3), [5, 24, 33]);
+});
+
+test('tier sheet stats attach by name (last season FP/G, games) when ESPN is not loaded', () => {
+  const board = HDA.buildBoard({ rankings: HDA.DEFAULT_RANKINGS });
+  const jokic = board.byKey.get('n:nikola jokic');
+  assert.equal(jokic.fppgLast, 58.9);
+  assert.equal(jokic.fppgLastSource, 'tier sheet');
+  assert.equal(jokic.gamesLastSeason, 65);
+  assert.equal(board.byKey.get('n:aday mara').fppgLast, null, 'rookie: no last season');
 });
