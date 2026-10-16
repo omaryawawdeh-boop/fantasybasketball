@@ -92,7 +92,8 @@
 
   function commit(next, msg) {
     if (!state.canWrite) { toast('This list is read-only for you'); return; }
-    if (!next || next.players === (state.board && state.board.players)) return;
+    // Unchanged? (A tier rename keeps the same players, so compare the names too.)
+    if (!next || (state.board && next.players === state.board.players && JSON.stringify(next.tierLabels || {}) === JSON.stringify(state.board.tierLabels || {}))) return;
     if (state.board) undo.push(state.board);
     if (undo.length > 50) undo.shift();
     state.board = { players: next.players, tierLabels: next.tierLabels || {}, updatedAt: Date.now(), updatedFrom: 'phone' };
@@ -203,7 +204,7 @@
         html += `<section class="tier"><div class="th">
           <span class="tn">T${t}</span>
           ${renaming
-            ? `<input id="tiername" value="${esc(labels[t] || '')}" placeholder="Tier name" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel);font-size:16px"><button class="mini" data-act="renameSave" data-arg="${t}">Save</button>`
+            ? `<input id="tiername" value="${esc(state.renameText != null ? state.renameText : labels[t] || '')}" placeholder="Tier name" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel);font-size:16px"><button class="mini" data-act="renameSave" data-arg="${t}">Save</button>`
             : `<span class="tl">${esc(labels[t] || '')}</span><span class="tc">${count}</span>
                <button class="mini" data-act="rename" data-arg="${t}">Rename</button>${t > 1 ? `<button class="mini" data-act="merge" data-arg="${t}">Merge ↑</button>` : ''}`}
         </div><ol class="list">${rows.map(rowHtml).join('')}</ol></section>`;
@@ -242,8 +243,13 @@
     tier(arg) { const [r, d] = arg.split('|').map(Number); commit(E.changeTier(P(), L(), r, d)); state.open = null; render(); },
     split(arg) { commit(E.splitTier(P(), L(), Number(arg)), 'New tier started'); },
     merge(arg) { commit(E.mergeTier(P(), L(), Number(arg)), 'Tiers merged'); },
-    rename(arg) { state.renaming = Number(arg); render(); const i = root.querySelector('#tiername'); if (i) i.focus(); },
-    renameSave(arg) { const v = (root.querySelector('#tiername') || {}).value || ''; state.renaming = null; commit(E.renameTier(P(), L(), Number(arg), v)) || render(); },
+    rename(arg) { state.renaming = Number(arg); state.renameText = null; render(); const i = root.querySelector('#tiername'); if (i) i.focus(); },
+    renameSave(arg) {
+      const v = (root.querySelector('#tiername') || {}).value || '';
+      state.renaming = null; state.renameText = null;
+      commit(E.renameTier(P(), L(), Number(arg), v), v.trim() ? `Tier ${arg} renamed` : `Tier ${arg} name cleared`);
+      render();
+    },
     flag(arg) {
       const [r, f] = arg.split('|');
       if (f === 'rookie') {
@@ -318,6 +324,7 @@
     } else if (id === 'addname') state.addName = ev.target.value;
     else if (id === 'addrank') state.addRank = ev.target.value;
     else if (id === 'paste') state.pasteText = ev.target.value;
+    else if (id === 'tiername') state.renameText = ev.target.value; // survives a redraw while typing
   });
   root.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
