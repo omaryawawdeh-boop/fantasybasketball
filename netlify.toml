@@ -1,0 +1,9 @@
+# Netlify deploy settings for Hardwood Wire (the Next.js app lives in web/).
+# Netlify detects Next.js and runs the API routes as serverless functions.
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
