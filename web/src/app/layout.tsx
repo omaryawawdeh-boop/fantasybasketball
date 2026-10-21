@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: { default: "Hardwood Wire", template: "%s · Hardwood Wire" },
   description: "A personal NBA intelligence feed: news, highlights, injuries, scores and stats — without the social media noise.",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Hardwood", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

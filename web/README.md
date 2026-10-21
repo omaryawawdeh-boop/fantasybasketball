@@ -52,6 +52,7 @@ Copy `.env.example` to `.env.local` and uncomment what you want. Every setting i
 ### Run it like a real app (optional, free)
 
 - **On your own computer:** `npm run build && npm start` gives a faster production server on port 3000.
+- **On your phone:** deploy to Vercel (next bullet), open the link in Safari/Chrome, then Share → *Add to Home Screen*. It opens full-screen with its own icon.
 - **On the internet for free:** push the repo to GitHub, import it at [vercel.com](https://vercel.com) (Hobby plan, free for personal use), set **Root Directory = `web`**, and add any `.env.local` values under Project → Settings → Environment Variables. Since there's no login, anyone with the URL can use it. That's fine for a personal reader, but don't share the URL if you've added a paid AI key.
 
 ---
