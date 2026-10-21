@@ -1,5 +1,7 @@
 # Hoops Draft Assistant
 
+> **Also in this repo: [Hardwood Wire](web/README.md)**, a personal NBA news, highlights, injuries, scores, stats and fantasy web app (`web/`). Run it with `cd web && npm install && npm run dev`. The draft extension below is unchanged.
+
 Your own fantasy basketball tier list, live inside the ESPN draft room. It works like the FantasyPros Draft Assistant panel, but your list drives every suggestion.
 
 ![Panel mid-draft](docs/panel-preview.png)
